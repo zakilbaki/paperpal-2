@@ -3,7 +3,16 @@ from __future__ import annotations  # must be first
 from typing import Optional
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from backend.app.core.config import settings  # ✅ FIXED
+
+# -------------------------------------------------------
+# 🧩 Config import (Render + Local compatible)
+# -------------------------------------------------------
+try:
+    # Works locally when running from project root (uvicorn backend.app.main:app)
+    from backend.app.core.config import settings
+except ModuleNotFoundError:
+    # Works on Render (container starts at /app)
+    from app.core.config import settings
 
 # --- Global MongoDB clients ---
 _client: Optional[AsyncIOMotorClient] = None
@@ -19,7 +28,7 @@ def get_client() -> AsyncIOMotorClient:
         _client = AsyncIOMotorClient(
             settings.MONGODB_URI,
             uuidRepresentation="standard",
-            tlsCAFile=certifi.where(),  # ensure SSL trust works on macOS
+            tlsCAFile=certifi.where(),  # ensure SSL trust works (macOS/Render)
         )
     return _client
 
@@ -38,7 +47,10 @@ def get_db() -> AsyncIOMotorDatabase:
 async def get_database() -> AsyncIOMotorDatabase:
     """
     FastAPI dependency-compatible accessor for the DB.
-    Example: Depends(get_database)
+    Example usage:
+        @router.get("/items")
+        async def get_items(db=Depends(get_database)):
+            ...
     """
     return get_db()
 
@@ -52,5 +64,6 @@ async def ping() -> bool:
     try:
         res = await client.admin.command("ping")
         return bool(res.get("ok", 0) == 1)
-    except Exception:
+    except Exception as e:
+        print("MongoDB ping failed:", e)
         return False
