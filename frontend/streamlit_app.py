@@ -1,116 +1,132 @@
-import os
+import warnings
+from urllib3.exceptions import NotOpenSSLWarning
+warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
+
+import requests
 import streamlit as st
-from dotenv import load_dotenv
-from api import BackendClient
 
 # -------------------------------------------------------
-# 🌍 Load environment variables
+# 🌍 Hard-coded backend endpoint
 # -------------------------------------------------------
-# Loads .env from the frontend folder (Render + local)
-load_dotenv()
+BACKEND_URL = "https://paperpal-pvqg.onrender.com/api/v1/papers/upload"
 
 # -------------------------------------------------------
 # 🎨 Page setup
 # -------------------------------------------------------
 st.set_page_config(
-    page_title="PaperPal Frontend",
-    page_icon="📄",
+    page_title="PaperPal | AI PDF Parser",
+    page_icon="🧠",
     layout="wide"
 )
 
-st.title("📄 Upload PDF → Extract Sections & Metadata")
-st.write("Upload a PDF to send to the FastAPI backend and visualize the parsed output.")
-
 # -------------------------------------------------------
-# ⚙️ Sidebar: Settings
+# 💎 Styles & Header
 # -------------------------------------------------------
-st.sidebar.header("⚙️ Settings")
+st.markdown(
+    """
+    <style>
+        /* Layout cleanup */
+        div[data-testid="stSidebar"] {display: none;}
+        header[data-testid="stHeader"] {visibility: hidden;}
+        footer {visibility: hidden;}
+        .block-container {padding-top: 2rem;}
 
-# Default backend points to your live Render backend ✅
-backend_url = st.sidebar.text_input(
-    "Backend URL",
-    os.getenv("BACKEND_BASE_URL", "https://paperpal-backend.onrender.com")
+        .main-title {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 800;
+            background: -webkit-linear-gradient(90deg, #FF4B4B, #FFB347);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sub-title {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #aaa;
+            margin-bottom: 2rem;
+        }
+        .upload-box {
+            border: 2px dashed #FF4B4B;
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            background-color: #111;
+        }
+        section[data-testid="stFileUploader"] small {display: none !important;}
+        section[data-testid="stFileUploader"]::after {
+            content: "💾 Limit 50MB per file • PDF";
+            display: block;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #AAAAAA;
+            margin-top: -12px;
+        }
+    </style>
+
+    <h1 class="main-title">🚀 PaperPal</h1>
+    <p class="sub-title">AI-powered research paper parser — extract sections, abstracts, and metadata in seconds.</p>
+    """,
+    unsafe_allow_html=True
 )
-
-api_prefix = st.sidebar.text_input(
-    "API Prefix",
-    os.getenv("API_PREFIX", "/api/v1")
-)
-
-upload_route = st.sidebar.text_input(
-    "Upload Route",
-    os.getenv("API_UPLOAD_ROUTE", "/papers/upload")
-)
-
-token = st.sidebar.text_input(
-    "Bearer Token (optional)",
-    os.getenv("API_BEARER_TOKEN", ""),
-    type="password"
-)
-
-apply_btn = st.sidebar.button("Apply Changes")
-
-# Create or update the backend client when settings change
-if "client" not in st.session_state or apply_btn:
-    os.environ["BACKEND_BASE_URL"] = backend_url
-    os.environ["API_PREFIX"] = api_prefix
-    os.environ["API_UPLOAD_ROUTE"] = upload_route
-    os.environ["API_BEARER_TOKEN"] = token
-    st.session_state.client = BackendClient(
-        base_url=backend_url,
-        api_prefix=api_prefix,
-        token=token,
-    )
 
 # -------------------------------------------------------
 # 📂 File uploader
 # -------------------------------------------------------
+st.markdown("<div class='upload-box'>📄 Drop your PDF below</div>", unsafe_allow_html=True)
 uploaded_file = st.file_uploader(
-    "Choose a PDF file",
+    "Upload your PDF (max 50 MB)",
     type=["pdf"],
     accept_multiple_files=False,
+    label_visibility="collapsed"
 )
 
 # -------------------------------------------------------
 # 🚀 Upload + process
 # -------------------------------------------------------
-if uploaded_file and st.button("Upload & Process", type="primary"):
+if uploaded_file and st.button("✨ Analyze Paper", type="primary"):
     try:
-        st.info("📤 Uploading to backend… please wait.")
-        bytes_data = uploaded_file.read()
-        filename = uploaded_file.name
+        with st.spinner("📤 Uploading & analyzing your paper..."):
+            file_bytes = uploaded_file.read()
+            if len(file_bytes) > 50 * 1024 * 1024:
+                st.error("❌ File too large. Please upload a file under 50 MB.")
+                st.stop()
 
-        # Call backend
-        result = st.session_state.client.upload_pdf(bytes_data, filename)
-        st.success("✅ Upload successful!")
+            files = {"file": (uploaded_file.name, file_bytes, "application/pdf")}
+            resp = requests.post(BACKEND_URL, files=files, timeout=120)
 
-        # -------------------------------------------------------
-        # 🧩 Display result
-        # -------------------------------------------------------
-        st.subheader("🧩 Parsed Metadata and Sections")
+        if resp.status_code != 200:
+            st.error(f"❌ Upload failed (HTTP {resp.status_code})")
+            st.text(resp.text)
+        else:
+            result = resp.json()
+            st.success("✅ Paper processed successfully!")
 
-        # 🧠 Paper Title
-        if "paper_title" in result:
-            st.markdown("### 🧠 Paper Title")
-            st.write(result["paper_title"])
+            st.markdown("---")
+            st.subheader("🧠 Extracted Paper Insights")
 
-        # 📇 Metadata
-        if "metadata" in result:
-            st.markdown("### 📇 Metadata")
-            for k, v in result["metadata"].items():
-                st.write(f"**{k}:** {v}")
 
-        # 📘 Sections
-        if "sections" in result:
-            st.markdown("### 📘 Sections")
-            for section in result["sections"]:
-                st.markdown(f"#### {section.get('title', 'Untitled')}")
-                st.write(section.get("content", ""))
+            if "metadata" in result:
+                st.markdown("### 📇 Metadata")
+                for k, v in result["metadata"].items():
+                    st.write(f"**{k}:** {v}")
 
-        # 🔍 Raw JSON
-        with st.expander("🔍 Raw JSON response"):
-            st.json(result)
+            if "sections" in result:
+                st.markdown("### 📘 Sections")
+                for s in result["sections"]:
+                    with st.expander(f"📄 {s.get('title','Untitled')}"):
+                        st.write(s.get("content",""))
 
+            with st.expander("🧾 Raw JSON Response"):
+                st.json(result)
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"🌐 Network error: {e}")
     except Exception as e:
-        st.error(f"❌ Upload failed: {e}")
+        st.error(f"⚠️ Unexpected error: {e}")
         st.exception(e)
+
+# -------------------------------------------------------
+# 🧠 Footer
+# -------------------------------------------------------
+st.markdown("---")
+st.caption("Built  using FastAPI + Streamlit • PaperPal © 2025")
