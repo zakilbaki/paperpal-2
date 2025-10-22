@@ -2,9 +2,10 @@ from __future__ import annotations
 from typing import List, Dict
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 
-from backend.app.db.mongo import get_database
-from backend.app.models.paper import PaperMetaDB, PaperUploadResponse
-from backend.app.services.pdf_parser import extract_pdf_text, segment_sections
+# ✅ FIXED imports (Render uses /backend as project root)
+from app.db.mongo import get_database
+from app.models.paper import PaperMetaDB, PaperUploadResponse
+from app.services.pdf_parser import extract_pdf_text, segment_sections
 
 router = APIRouter()
 
@@ -75,13 +76,10 @@ async def upload_paper(
     # ---------------------------------------------------------
     # 🏷️ 3.5 Infer paper title from first lines
     # ---------------------------------------------------------
-    # If the first section has a meaningless title (like “3” or “Untitled Section”),
-    # use the first non-empty line from the extracted text as the paper title.
     paper_title = "Unknown Title"
     if sections:
         first_title = sections[0]["title"]
         if first_title.lower().startswith("untitled") or first_title.isdigit() or len(first_title) < 3:
-            # Extract first non-empty text line as title candidate
             first_line = next((line.strip() for line in text.splitlines() if len(line.strip()) > 5), None)
             if first_line:
                 paper_title = first_line
@@ -98,7 +96,7 @@ async def upload_paper(
         size_bytes=len(raw),
     ).model_dump()
 
-    meta["paper_title"] = paper_title  # ✅ add title to metadata
+    meta["paper_title"] = paper_title
 
     result = await db.papers.insert_one(meta)
     paper_id = str(result.inserted_id)
@@ -114,7 +112,9 @@ async def upload_paper(
         num_sections=len(sections),
         sections=sections,
         char_count=len(text),
-        paper_title=paper_title,  # ✅ send it back to frontend
+        paper_title=paper_title,
     )
 
+
+# ✅ Ensures model rebuild for Pydantic v2
 PaperUploadResponse.model_rebuild()
