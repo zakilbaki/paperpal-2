@@ -2,13 +2,12 @@ from __future__ import annotations
 from typing import List, Dict
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 
-# ✅ FIXED imports (Render uses /backend as project root)
-from app.db.mongo import get_database
-from app.models.paper import PaperMetaDB, PaperUploadResponse
-from app.services.pdf_parser import extract_pdf_text, segment_sections
+# ✅ FIXED imports for Render and local
+from backend.app.db.mongo import get_database
+from backend.app.models.paper import PaperMetaDB, PaperUploadResponse
+from backend.app.services.pdf_parser import extract_pdf_text, segment_sections
 
 router = APIRouter()
-
 
 @router.post("/upload", response_model=PaperUploadResponse)
 async def upload_paper(
@@ -114,7 +113,6 @@ async def upload_paper(
         char_count=len(text),
         paper_title=paper_title,
     )
-
 
 # ✅ Ensures model rebuild for Pydantic v2
 PaperUploadResponse.model_rebuild()

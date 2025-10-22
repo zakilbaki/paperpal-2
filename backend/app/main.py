@@ -34,11 +34,12 @@ app.add_middleware(
 
 # -------------------------------------------------------
 # 🧱 Routers import
-# (⚠️ No 'backend.' prefix when deployed — working directory = /backend)
 # -------------------------------------------------------
-from app.api.v1.health import router as health_router
-from app.api.v1.papers import router as papers_router
+# ✅ Correct imports for both local + Render
+from backend.app.api.v1.health import router as health_router
+from backend.app.api.v1.papers import router as papers_router
 
+# Register routers
 app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
 app.include_router(papers_router, prefix="/api/v1/papers", tags=["Papers"])
 
@@ -48,4 +49,3 @@ app.include_router(papers_router, prefix="/api/v1/papers", tags=["Papers"])
 @app.get("/")
 async def root():
     return {"message": "Welcome to PaperPal API 👋"}
-

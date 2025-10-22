@@ -1,0 +1,9 @@
+import asyncio
+from backend.app.db.mongo import ping
+
+async def main():
+    ok = await ping()
+    print("Mongo connection:", ok)
+
+asyncio.run(main())
+
