@@ -1,17 +1,19 @@
 from __future__ import annotations  # must be first
 
+import asyncio
 from typing import Optional
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo.errors import ServerSelectionTimeoutError
 
 # -------------------------------------------------------
 # 🧩 Config import (Render + Local compatible)
 # -------------------------------------------------------
 try:
-    # Works locally when running from project root (uvicorn backend.app.main:app)
+    # Local run (uvicorn backend.app.main:app)
     from backend.app.core.config import settings
 except ModuleNotFoundError:
-    # Works on Render (container starts at /app)
+    # Render container (starts at /app)
     from app.core.config import settings
 
 # --- Global MongoDB clients ---
@@ -22,13 +24,17 @@ _db: Optional[AsyncIOMotorDatabase] = None
 def get_client() -> AsyncIOMotorClient:
     """
     Return a singleton AsyncIOMotorClient using settings.MONGODB_URI.
+    Includes full TLS and CA file for MongoDB Atlas.
     """
     global _client
     if _client is None:
         _client = AsyncIOMotorClient(
             settings.MONGODB_URI,
             uuidRepresentation="standard",
-            tlsCAFile=certifi.where(),  # ensure SSL trust works (macOS/Render)
+            tls=True,                        # explicitly enable TLS
+            tlsAllowInvalidCertificates=False,
+            tlsCAFile=certifi.where(),        # ensures trusted CA
+            serverSelectionTimeoutMS=5000,    # 5s timeout for connection
         )
     return _client
 
@@ -47,7 +53,7 @@ def get_db() -> AsyncIOMotorDatabase:
 async def get_database() -> AsyncIOMotorDatabase:
     """
     FastAPI dependency-compatible accessor for the DB.
-    Example usage:
+    Example:
         @router.get("/items")
         async def get_items(db=Depends(get_database)):
             ...
@@ -55,15 +61,25 @@ async def get_database() -> AsyncIOMotorDatabase:
     return get_db()
 
 
-async def ping() -> bool:
+# -------------------------------------------------------
+# 🧠 Health check with retry (Render-safe)
+# -------------------------------------------------------
+async def ping(max_retries: int = 5, delay_s: float = 2.0) -> bool:
     """
-    Check MongoDB connection health.
+    Check MongoDB connection health with retry logic.
     Returns True if 'ping' succeeds, False otherwise.
     """
     client = get_client()
-    try:
-        res = await client.admin.command("ping")
-        return bool(res.get("ok", 0) == 1)
-    except Exception as e:
-        print("MongoDB ping failed:", e)
-        return False
+    for attempt in range(1, max_retries + 1):
+        try:
+            res = await client.admin.command("ping")
+            if res.get("ok", 0) == 1:
+                print(f"[✅] MongoDB ping successful (attempt {attempt})")
+                return True
+        except ServerSelectionTimeoutError as e:
+            print(f"[⚠️] MongoDB ping timeout (attempt {attempt}/{max_retries}): {e}")
+        except Exception as e:
+            print(f"[❌] MongoDB ping failed (attempt {attempt}/{max_retries}): {e}")
+        await asyncio.sleep(delay_s)
+    print("[🚫] MongoDB ping failed after retries.")
+    return False

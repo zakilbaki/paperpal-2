@@ -6,12 +6,17 @@ from api import BackendClient
 # -------------------------------------------------------
 # 🌍 Load environment variables
 # -------------------------------------------------------
-load_dotenv()  # Load .env from frontend folder
+# Loads .env from the frontend folder (Render + local)
+load_dotenv()
 
 # -------------------------------------------------------
 # 🎨 Page setup
 # -------------------------------------------------------
-st.set_page_config(page_title="PaperPal Frontend", page_icon="📄", layout="wide")
+st.set_page_config(
+    page_title="PaperPal Frontend",
+    page_icon="📄",
+    layout="wide"
+)
 
 st.title("📄 Upload PDF → Extract Sections & Metadata")
 st.write("Upload a PDF to send to the FastAPI backend and visualize the parsed output.")
@@ -21,10 +26,27 @@ st.write("Upload a PDF to send to the FastAPI backend and visualize the parsed o
 # -------------------------------------------------------
 st.sidebar.header("⚙️ Settings")
 
-backend_url = st.sidebar.text_input("Backend URL", os.getenv("BACKEND_BASE_URL", "http://localhost:8000"))
-api_prefix = st.sidebar.text_input("API Prefix", os.getenv("API_PREFIX", "/api/v1"))
-upload_route = st.sidebar.text_input("Upload Route", os.getenv("API_UPLOAD_ROUTE", "/papers/upload"))
-token = st.sidebar.text_input("Bearer Token (optional)", os.getenv("API_BEARER_TOKEN", ""), type="password")
+# Default backend points to your live Render backend ✅
+backend_url = st.sidebar.text_input(
+    "Backend URL",
+    os.getenv("BACKEND_BASE_URL", "https://paperpal-backend.onrender.com")
+)
+
+api_prefix = st.sidebar.text_input(
+    "API Prefix",
+    os.getenv("API_PREFIX", "/api/v1")
+)
+
+upload_route = st.sidebar.text_input(
+    "Upload Route",
+    os.getenv("API_UPLOAD_ROUTE", "/papers/upload")
+)
+
+token = st.sidebar.text_input(
+    "Bearer Token (optional)",
+    os.getenv("API_BEARER_TOKEN", ""),
+    type="password"
+)
 
 apply_btn = st.sidebar.button("Apply Changes")
 
@@ -34,18 +56,31 @@ if "client" not in st.session_state or apply_btn:
     os.environ["API_PREFIX"] = api_prefix
     os.environ["API_UPLOAD_ROUTE"] = upload_route
     os.environ["API_BEARER_TOKEN"] = token
-    st.session_state.client = BackendClient(base_url=backend_url, api_prefix=api_prefix, token=token)
+    st.session_state.client = BackendClient(
+        base_url=backend_url,
+        api_prefix=api_prefix,
+        token=token,
+    )
 
 # -------------------------------------------------------
 # 📂 File uploader
 # -------------------------------------------------------
-uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"], accept_multiple_files=False)
+uploaded_file = st.file_uploader(
+    "Choose a PDF file",
+    type=["pdf"],
+    accept_multiple_files=False,
+)
 
+# -------------------------------------------------------
+# 🚀 Upload + process
+# -------------------------------------------------------
 if uploaded_file and st.button("Upload & Process", type="primary"):
     try:
         st.info("📤 Uploading to backend… please wait.")
         bytes_data = uploaded_file.read()
         filename = uploaded_file.name
+
+        # Call backend
         result = st.session_state.client.upload_pdf(bytes_data, filename)
         st.success("✅ Upload successful!")
 
@@ -59,7 +94,7 @@ if uploaded_file and st.button("Upload & Process", type="primary"):
             st.markdown("### 🧠 Paper Title")
             st.write(result["paper_title"])
 
-        # 📇 Metadata (optional)
+        # 📇 Metadata
         if "metadata" in result:
             st.markdown("### 📇 Metadata")
             for k, v in result["metadata"].items():
@@ -70,7 +105,7 @@ if uploaded_file and st.button("Upload & Process", type="primary"):
             st.markdown("### 📘 Sections")
             for section in result["sections"]:
                 st.markdown(f"#### {section.get('title', 'Untitled')}")
-                st.write(section.get("content", ""))  # ✅ fixed key name
+                st.write(section.get("content", ""))
 
         # 🔍 Raw JSON
         with st.expander("🔍 Raw JSON response"):
