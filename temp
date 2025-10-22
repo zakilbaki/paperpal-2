@@ -1,0 +1,7 @@
+from pymongo import MongoClient
+import certifi
+
+uri = "mongodb+srv://messi:Zikodkage12@cluster0.3tkhejc.mongodb.net/?retryWrites=true&w=majority&tls=true"
+client = MongoClient(uri, tlsCAFile=certifi.where())
+print(client.admin.command("ping"))
+
