@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # -------------------------------------------------------
 # 🧩 Load environment variables
 # -------------------------------------------------------
-# This makes sure .env (in backend/) is read on startup
+# Ensures backend/.env is loaded on startup (works locally + on Render)
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # -------------------------------------------------------
@@ -34,9 +34,10 @@ app.add_middleware(
 
 # -------------------------------------------------------
 # 🧱 Routers import
-from backend.app.api.v1.health import router as health_router
-from backend.app.api.v1.papers import router as papers_router
-
+# (⚠️ No 'backend.' prefix when deployed — working directory = /backend)
+# -------------------------------------------------------
+from app.api.v1.health import router as health_router
+from app.api.v1.papers import router as papers_router
 
 app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
 app.include_router(papers_router, prefix="/api/v1/papers", tags=["Papers"])
