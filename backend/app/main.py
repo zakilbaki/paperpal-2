@@ -7,10 +7,8 @@ from dotenv import load_dotenv
 # -------------------------------------------------------
 # 🧩 Load environment variables
 # -------------------------------------------------------
-# Works both locally and on Render
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
-
 load_dotenv(dotenv_path=ENV_PATH)
 print(f"[DEBUG] Loaded .env from: {ENV_PATH}")
 
@@ -24,7 +22,7 @@ app = FastAPI(
 )
 
 # -------------------------------------------------------
-# 🌐 CORS setup for Streamlit frontend
+# 🌐 CORS setup
 # -------------------------------------------------------
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:8501")
 
@@ -37,20 +35,20 @@ app.add_middleware(
 )
 
 # -------------------------------------------------------
-# 🧱 Routers import (Render + Local compatible)
+# 🧱 Router imports (for both Render & local)
 # -------------------------------------------------------
 try:
-    # Local run from project root
-    from backend.app.api.v1.health import router as health_router
-    from backend.app.api.v1.papers import router as papers_router
+    # Local run (from project root)
+    from backend.app.api.v1 import health, papers
 except ModuleNotFoundError:
-    # Render (container WORKDIR=/app)
-    from app.api.v1.health import router as health_router
-    from app.api.v1.papers import router as papers_router
+    # Render container (WORKDIR=/app)
+    from app.api.v1 import health, papers
 
-# Register routers
-app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
-app.include_router(papers_router, prefix="/api/v1/papers", tags=["Papers"])
+# -------------------------------------------------------
+# 🔗 Register routers
+# -------------------------------------------------------
+app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
+app.include_router(papers.router, prefix="/api/v1/papers", tags=["Papers"])
 
 # -------------------------------------------------------
 # 🏁 Root endpoint
@@ -58,3 +56,12 @@ app.include_router(papers_router, prefix="/api/v1/papers", tags=["Papers"])
 @app.get("/")
 async def root():
     return {"message": "Welcome to PaperPal API 👋"}
+
+# -------------------------------------------------------
+# 🧪 Debug: list routes on startup
+# -------------------------------------------------------
+@app.on_event("startup")
+async def show_registered_routes():
+    print("\n[DEBUG] Registered routes:")
+    for route in app.routes:
+        print(f"  {route.path} → {', '.join(route.methods)}")
