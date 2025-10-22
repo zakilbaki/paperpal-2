@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-from backend.app.db.mongo import ping
-from backend.app.core.config import settings
+from app.db.mongo import ping
+
+from app.db.mongo import settings
 
 router = APIRouter()
 
