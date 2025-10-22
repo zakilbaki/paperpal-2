@@ -3,8 +3,7 @@ from __future__ import annotations  # must be first
 from typing import Optional
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from app.core.config import settings
-
+from backend.app.core.config import settings  # ✅ FIXED
 
 # --- Global MongoDB clients ---
 _client: Optional[AsyncIOMotorClient] = None
