@@ -2,18 +2,36 @@ from __future__ import annotations
 from typing import List, Dict
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 
-# ✅ FIXED imports for Render and local
-from backend.app.db.mongo import get_database
-from backend.app.models.paper import PaperMetaDB, PaperUploadResponse
-from backend.app.services.pdf_parser import extract_pdf_text, segment_sections
+# -------------------------------------------------------
+# 🧩 Dual import logic (works both locally and on Render)
+# -------------------------------------------------------
+try:
+    # Local (uvicorn backend.app.main:app)
+    from backend.app.db.mongo import get_database
+    from backend.app.models.paper import PaperMetaDB, PaperUploadResponse
+    from backend.app.services.pdf_parser import extract_pdf_text, segment_sections
+except ModuleNotFoundError:
+    # Render container (WORKDIR=/app)
+    from app.db.mongo import get_database
+    from app.models.paper import PaperMetaDB, PaperUploadResponse
+    from app.services.pdf_parser import extract_pdf_text, segment_sections
 
+
+# -------------------------------------------------------
+# 🚀 Router
+# -------------------------------------------------------
 router = APIRouter()
+
 
 @router.post("/upload", response_model=PaperUploadResponse)
 async def upload_paper(
     file: UploadFile = File(..., description="PDF file to analyze"),
     db=Depends(get_database),
 ):
+    """
+    Uploads a PDF, extracts sections, stores metadata in MongoDB,
+    and returns structured output.
+    """
     # ---------------------------------------------------------
     # 🧩 1. Validate file type
     # ---------------------------------------------------------
@@ -73,13 +91,20 @@ async def upload_paper(
         sections.append({"title": title, "content": content})
 
     # ---------------------------------------------------------
-    # 🏷️ 3.5 Infer paper title from first lines
+    # 🏷️ 3.5 Infer paper title
     # ---------------------------------------------------------
     paper_title = "Unknown Title"
     if sections:
         first_title = sections[0]["title"]
-        if first_title.lower().startswith("untitled") or first_title.isdigit() or len(first_title) < 3:
-            first_line = next((line.strip() for line in text.splitlines() if len(line.strip()) > 5), None)
+        if (
+            first_title.lower().startswith("untitled")
+            or first_title.isdigit()
+            or len(first_title) < 3
+        ):
+            first_line = next(
+                (line.strip() for line in text.splitlines() if len(line.strip()) > 5),
+                None,
+            )
             if first_line:
                 paper_title = first_line
                 sections[0]["title"] = paper_title
@@ -114,5 +139,6 @@ async def upload_paper(
         paper_title=paper_title,
     )
 
-# ✅ Ensures model rebuild for Pydantic v2
+
+# ✅ Pydantic v2 model rebuild
 PaperUploadResponse.model_rebuild()
