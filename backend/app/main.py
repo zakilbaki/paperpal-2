@@ -7,8 +7,12 @@ from dotenv import load_dotenv
 # -------------------------------------------------------
 # 🧩 Load environment variables
 # -------------------------------------------------------
-# Ensures backend/.env is loaded on startup (works locally + on Render)
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+# Works both locally and on Render
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+load_dotenv(dotenv_path=ENV_PATH)
+print(f"[DEBUG] Loaded .env from: {ENV_PATH}")
 
 # -------------------------------------------------------
 # 🚀 Create FastAPI app
@@ -33,11 +37,16 @@ app.add_middleware(
 )
 
 # -------------------------------------------------------
-# 🧱 Routers import
+# 🧱 Routers import (Render + Local compatible)
 # -------------------------------------------------------
-# ✅ Correct imports for both local + Render
-from backend.app.api.v1.health import router as health_router
-from backend.app.api.v1.papers import router as papers_router
+try:
+    # Local run from project root
+    from backend.app.api.v1.health import router as health_router
+    from backend.app.api.v1.papers import router as papers_router
+except ModuleNotFoundError:
+    # Render (container WORKDIR=/app)
+    from app.api.v1.health import router as health_router
+    from app.api.v1.papers import router as papers_router
 
 # Register routers
 app.include_router(health_router, prefix="/api/v1/health", tags=["Health"])
