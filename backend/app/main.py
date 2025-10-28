@@ -18,7 +18,7 @@ print(f"[DEBUG] Loaded .env from: {ENV_PATH}")
 app = FastAPI(
     title="PaperPal API",
     version="0.1.0",
-    description="Backend API for PDF uploads, parsing, and MongoDB storage.",
+    description="Backend API for PDF uploads, summarization, keyword extraction, and MongoDB storage.",
 )
 
 # -------------------------------------------------------
@@ -35,21 +35,22 @@ app.add_middleware(
 )
 
 # -------------------------------------------------------
-# 🧱 Router imports (for both Render & local)
+# 🧱 Router imports (local & Render compatible)
 # -------------------------------------------------------
 try:
-    # Local run (from project root)
-    from backend.app.api.v1 import health, papers
-except ModuleNotFoundError:
+    # Local dev (project root context)
+    from backend.app.api.v1 import health, summarize, papers
+from backend.app.api.v1 import compareexcept ModuleNotFoundError:
     # Render container (WORKDIR=/app)
-    from app.api.v1 import health, papers
+    from app.api.v1 import health, summarize, papers
 
 # -------------------------------------------------------
 # 🔗 Register routers
 # -------------------------------------------------------
 app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
+app.include_router(summarize.router, prefix="/api/v1/papers", tags=["Summarization"])
 app.include_router(papers.router, prefix="/api/v1/papers", tags=["Papers"])
-
+app.include_router(compare.router, prefix="/api/v1/papers", tags=["Comparison"])
 # -------------------------------------------------------
 # 🏁 Root endpoint
 # -------------------------------------------------------
@@ -64,4 +65,6 @@ async def root():
 async def show_registered_routes():
     print("\n[DEBUG] Registered routes:")
     for route in app.routes:
-        print(f"  {route.path} → {', '.join(route.methods)}")
+        methods = ", ".join(route.methods)
+        print(f"  {route.path:40} → {methods}")
+    print("-------------------------------------------------------")
