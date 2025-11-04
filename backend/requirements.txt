@@ -9,6 +9,6 @@ python-multipart==0.0.9
 pdfminer.six==20240706
 certifi
 yake==0.4.8
-sentence-transformers>=3.0.0
+sentence-transformers==2.2.2
 numpy>=1.26.0
 scikit-learn==1.5.2
