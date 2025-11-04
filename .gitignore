@@ -1,5 +1,23 @@
-venv/
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 *.env
 .DS_Store
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Local files
+temp/
+*.log
+*.sqlite3
+
+# Streamlit cache
+.streamlit/
+
+# Jupyter
+.ipynb_checkpoints/
