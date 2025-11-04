@@ -7,9 +7,9 @@ cachetools==6.2.1
 certifi==2025.10.5
 cffi==2.0.0
 charset-normalizer==3.4.4
-click==8.3.0
+click==8.1.8
 cryptography==46.0.3
-dnspython==2.8.0
+dnspython==2.7.0
 fastapi==0.119.1
 gitdb==4.0.12
 GitPython==3.1.45
@@ -21,7 +21,7 @@ jsonschema-specifications==2025.9.1
 MarkupSafe==3.0.3
 motor==3.7.1
 narwhals==2.9.0
-numpy==2.3.4
+numpy==2.0.2
 packaging==25.0
 pandas==2.3.3
 pdfminer.six==20250506
@@ -38,7 +38,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-multipart==0.0.20
 pytz==2025.2
-referencing==0.37.0
+referencing==0.36.2
 requests==2.32.5
 rpds-py==0.27.1
 six==1.17.0
