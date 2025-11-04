@@ -1,132 +1,143 @@
-import warnings
-from urllib3.exceptions import NotOpenSSLWarning
-warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
-
-import requests
+import os
+import pandas as pd
 import streamlit as st
+from api import BackendClient
 
-# -------------------------------------------------------
-# 🌍 Hard-coded backend endpoint
-# -------------------------------------------------------
-BACKEND_URL = "https://paperpal-pvqg.onrender.com/api/v1/papers/upload"
-
-# -------------------------------------------------------
-# 🎨 Page setup
-# -------------------------------------------------------
+# -----------------------------------------------------
+# ⚙️ Page config
+# -----------------------------------------------------
 st.set_page_config(
-    page_title="PaperPal | AI PDF Parser",
+    page_title="🚀 PaperPal 2.0",
     page_icon="🧠",
-    layout="wide"
+    layout="wide",
 )
 
-# -------------------------------------------------------
-# 💎 Styles & Header
-# -------------------------------------------------------
+# -----------------------------------------------------
+# 🧩 Backend Client
+# -----------------------------------------------------
+client = BackendClient(base_url=os.getenv("BACKEND_BASE_URL", "http://localhost:8000"))
+
+# -----------------------------------------------------
+# 🧠 Header
+# -----------------------------------------------------
 st.markdown(
     """
-    <style>
-        /* Layout cleanup */
-        div[data-testid="stSidebar"] {display: none;}
-        header[data-testid="stHeader"] {visibility: hidden;}
-        footer {visibility: hidden;}
-        .block-container {padding-top: 2rem;}
-
-        .main-title {
-            text-align: center;
-            font-size: 3rem;
-            font-weight: 800;
-            background: -webkit-linear-gradient(90deg, #FF4B4B, #FFB347);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .sub-title {
-            text-align: center;
-            font-size: 1.1rem;
-            color: #aaa;
-            margin-bottom: 2rem;
-        }
-        .upload-box {
-            border: 2px dashed #FF4B4B;
-            border-radius: 15px;
-            padding: 2rem;
-            text-align: center;
-            background-color: #111;
-        }
-        section[data-testid="stFileUploader"] small {display: none !important;}
-        section[data-testid="stFileUploader"]::after {
-            content: "💾 Limit 50MB per file • PDF";
-            display: block;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #AAAAAA;
-            margin-top: -12px;
-        }
-    </style>
-
-    <h1 class="main-title">🚀 PaperPal</h1>
-    <p class="sub-title">AI-powered research paper parser — extract sections, abstracts, and metadata in seconds.</p>
+    <div style='text-align:center;'>
+        <h1>🚀 <b>PaperPal 2.0</b></h1>
+        <p style='color:gray;'>Upload, summarize and extract keywords from research papers effortlessly.</p>
+    </div>
     """,
     unsafe_allow_html=True
 )
 
-# -------------------------------------------------------
-# 📂 File uploader
-# -------------------------------------------------------
-st.markdown("<div class='upload-box'>📄 Drop your PDF below</div>", unsafe_allow_html=True)
-uploaded_file = st.file_uploader(
-    "Upload your PDF (max 50 MB)",
-    type=["pdf"],
-    accept_multiple_files=False,
-    label_visibility="collapsed"
-)
+# -----------------------------------------------------
+# 📤 Upload Section
+# -----------------------------------------------------
+st.markdown("## 📤 Upload Your Paper")
 
-# -------------------------------------------------------
-# 🚀 Upload + process
-# -------------------------------------------------------
-if uploaded_file and st.button("✨ Analyze Paper", type="primary"):
-    try:
-        with st.spinner("📤 Uploading & analyzing your paper..."):
-            file_bytes = uploaded_file.read()
-            if len(file_bytes) > 50 * 1024 * 1024:
-                st.error("❌ File too large. Please upload a file under 50 MB.")
-                st.stop()
+uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
 
-            files = {"file": (uploaded_file.name, file_bytes, "application/pdf")}
-            resp = requests.post(BACKEND_URL, files=files, timeout=120)
+if uploaded_file:
+    if st.button("🚀 Upload Paper", use_container_width=True):
+        with st.spinner("Uploading..."):
+            try:
+                res = client.upload_pdf(uploaded_file.read(), uploaded_file.name)
+                paper_id = res.get("paper_id") or res.get("data", {}).get("paper_id")
+                st.session_state["paper_id"] = paper_id
+                st.session_state["paper_name"] = uploaded_file.name
+                st.success(f"✅ Uploaded successfully: {uploaded_file.name}")
+                st.caption(f"🆔 Paper ID: `{paper_id}`")
+            except Exception as e:
+                st.error(f"❌ Upload failed: {e}")
 
-        if resp.status_code != 200:
-            st.error(f"❌ Upload failed (HTTP {resp.status_code})")
-            st.text(resp.text)
-        else:
-            result = resp.json()
-            st.success("✅ Paper processed successfully!")
+if "paper_id" not in st.session_state:
+    st.info("⬆️ Please upload a paper first.")
+    st.stop()
 
-            st.markdown("---")
-            st.subheader("🧠 Extracted Paper Insights")
+# -----------------------------------------------------
+# 🧭 Tabs
+# -----------------------------------------------------
+tab1, tab2 = st.tabs(["🧠 Summarize", "🔑 Keywords"])
 
+# -----------------------------------------------------
+# 🧠 SUMMARIZATION TAB
+# -----------------------------------------------------
+with tab1:
+    st.markdown("### ✍️ Generate Summary")
 
-            if "metadata" in result:
-                st.markdown("### 📇 Metadata")
-                for k, v in result["metadata"].items():
-                    st.write(f"**{k}:** {v}")
+    summary_type = st.radio(
+        "Select summary level:",
+        ["short", "medium", "detailed"],
+        horizontal=True,
+        help="Choose how detailed you want the summary to be.",
+    )
 
-            if "sections" in result:
-                st.markdown("### 📘 Sections")
-                for s in result["sections"]:
-                    with st.expander(f"📄 {s.get('title','Untitled')}"):
-                        st.write(s.get("content",""))
+    use_cache = st.toggle("Use cached summary (if available)", value=True)
 
-            with st.expander("🧾 Raw JSON Response"):
-                st.json(result)
+    if st.button("🚀 Summarize Paper", use_container_width=True):
+        with st.spinner(f"Generating {summary_type} summary... Please wait ⏳"):
+            try:
+                res = client.summarize(
+                    paper_id=st.session_state["paper_id"],
+                    summary_type=summary_type,
+                    use_cache=use_cache,
+                )
 
-    except requests.exceptions.RequestException as e:
-        st.error(f"🌐 Network error: {e}")
-    except Exception as e:
-        st.error(f"⚠️ Unexpected error: {e}")
-        st.exception(e)
+                st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
+                st.info(res.get("summary", ""))
 
-# -------------------------------------------------------
-# 🧠 Footer
-# -------------------------------------------------------
+                st.caption(
+                    f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
+                    f"🔢 {res.get('chunks', 0)} chunks • "
+                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
+                )
+
+            except Exception as e:
+                st.error(f"❌ Summarization failed: {e}")
+
+# -----------------------------------------------------
+# 🔑 KEYWORDS TAB
+# -----------------------------------------------------
+with tab2:
+    st.markdown("### 🧩 Keyword Ranking")
+
+    top_k = st.slider("How many top keywords to show?", 5, 40, 15, step=1)
+
+    if st.button("🚀 Extract Keywords", use_container_width=True):
+        with st.spinner("Extracting keywords... ⏳"):
+            try:
+                res = client.keywords(st.session_state["paper_id"], top_k)
+                st.success("✅ Keywords extracted successfully!")
+
+                kws = res.get("keywords", [])
+                if not kws:
+                    st.info("No keywords found.")
+                else:
+                    df = pd.DataFrame(kws)
+                    if "score" in df.columns:
+                        df = df.sort_values("score", ascending=True).reset_index(drop=True)
+                    df["rank"] = df.index + 1
+                    df = df[["rank", "text", "score"]]
+
+                    st.markdown("#### 🏅 Ranked Keywords")
+                    for _, row in df.iterrows():
+                        st.markdown(
+                            f"<div style='display:flex;justify-content:space-between;align-items:center;"
+                            f"padding:8px 12px;margin:6px 0;border-radius:10px;background:#1f1f1f;'>"
+                            f"<div><b>#{int(row['rank'])}</b> — {row['text']}</div>"
+                            f"<div style='font-size:12px;color:#9aa0a6;'>score: {row['score']:.5f}</div>"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+
+                    with st.expander("See as table"):
+                        st.dataframe(df, hide_index=True, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ Keyword extraction failed: {e}")
+
+# -----------------------------------------------------
+# 🧩 Footer
+# -----------------------------------------------------
 st.markdown("---")
-st.caption("Built  using FastAPI + Streamlit • PaperPal © 2025")
+st.caption("🚀 PaperPal 2.0 — Powered by FastAPI & Streamlit • 2025")

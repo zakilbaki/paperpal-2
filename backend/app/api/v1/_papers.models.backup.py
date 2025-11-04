@@ -1,35 +1,25 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
+from ...services.keywords import KeywordService
+from ...models.schemas import KeywordsRequest, KeywordsResponse
 
-# -------------------------------------------------------
-# 🧩 Dual import pattern for local + Render environments
-# -------------------------------------------------------
-try:
-    from backend.app.services.keywords import KeywordService  # local
-    from backend.app.models.schemas import KeywordsRequest, KeywordsResponse
-    from backend.app.core.config import settings
-except ModuleNotFoundError:
-    from app.services.keywords import KeywordService  # render
-    from app.models.schemas import KeywordsRequest, KeywordsResponse
-    from app.core.config import settings
+router = APIRouter(tags=["papers"])  # ✅ no prefix here; handled in main.py
 
-# -------------------------------------------------------
-# ⚙️ Router setup
-# -------------------------------------------------------
-router = APIRouter(tags=["papers"])  # ✅ no prefix; handled in main.py
 
 # -------------------------------------------------------
 # 🧩 Dependency: get database handle
 # -------------------------------------------------------
 async def get_db():
     """Return an AsyncIOMotorDatabase instance."""
+    from app.core.config import settings
     client = AsyncIOMotorClient(
         settings.MONGODB_URI,
         tls=True,
         tlsAllowInvalidCertificates=False
     )
     return client[settings.MONGODB_DB]
+
 
 # -------------------------------------------------------
 # 🧠 Keyword Extraction Endpoint
@@ -47,8 +37,7 @@ async def extract_keywords(
         service = KeywordService(db)
         result = await service.extract(
             paper_id=payload.paper_id,
-            top_k=payload.top_k,
-            use_cache=payload.use_cache  # ✅ NEW
+            top_k=payload.top_k
         )
         return KeywordsResponse(**result)
 

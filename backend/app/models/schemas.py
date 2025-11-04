@@ -1,4 +1,3 @@
-
 # --- Keyword Extraction Schemas ---
 from pydantic import BaseModel
 from typing import List
@@ -6,6 +5,8 @@ from typing import List
 class KeywordsRequest(BaseModel):
     paper_id: str
     top_k: int = 15
+    use_cache: bool = False   # 🚀 new field
+
 
 class KeywordItem(BaseModel):
     text: str
