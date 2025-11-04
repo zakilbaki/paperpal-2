@@ -21,3 +21,8 @@ temp/
 
 # Jupyter
 .ipynb_checkpoints/
+venv/
+.venv/
+.venv311/
+__pycache__/
+*.pyc
