@@ -1,26 +1,28 @@
-# Use a fuller Debian base to include full TLS support
-FROM python:3.11-bullseye
+# ⚙️ Lightweight base image (Debian slim)
+FROM python:3.11-slim
 
-# 🧩 Install SSL certificates and full TLS toolchain
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    openssl \
-    gnutls-bin \
-    curl \
- && update-ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+# Prevents Python output buffering
+ENV PYTHONUNBUFFERED=1
 
+# Set working directory
 WORKDIR /app
 
-# 🧩 Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt certifi
+# 🧩 Install only required system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
 
-# 🧩 Copy project files
-COPY . .
+# 🧠 Copy only backend dependencies (not frontend or .venv)
+COPY backend/requirements.txt .
 
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 🧠 Start FastAPI (Render auto-exposes $PORT)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 🧩 Copy backend code only
+COPY backend /app/backend
+
+# Expose the backend port
+EXPOSE 8000
+
+# 🚀 Run FastAPI
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

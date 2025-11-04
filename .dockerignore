@@ -1,8 +1,16 @@
-venv/
-.venv/
+# Ignore virtual environments and local caches
+.venv*
 __pycache__/
-.pytest_cache/
-temp/
 *.pyc
 *.pyo
-*.DS_Store
+*.pyd
+*.so
+*.db
+*.sqlite3
+*.log
+
+# Ignore frontend and git
+frontend/
+.git
+.gitignore
+
