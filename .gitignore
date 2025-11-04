@@ -26,3 +26,8 @@ venv/
 .venv311/
 __pycache__/
 *.pyc
+venv/
+.venv/
+.venv311/
+__pycache__/
+*.pyc
