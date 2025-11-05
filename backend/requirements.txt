@@ -9,8 +9,8 @@ python-multipart==0.0.9
 pdfminer.six==20240706
 certifi
 yake==0.4.8
-sentence-transformers==2.2.2
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.0.1+cpu
 numpy>=1.26.0
 scikit-learn==1.5.2
+sentence-transformers==2.2.2
+torch==2.0.1
+--extra-index-url https://download.pytorch.org/whl/cpu
