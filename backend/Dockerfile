@@ -1,28 +1,24 @@
-# ⚙️ Lightweight base image (Debian slim)
+# ⚙️ Lightweight base image
 FROM python:3.11-slim
 
-# Prevents Python output buffering
-ENV PYTHONUNBUFFERED=1
+# 🧩 System dependencies for PyMuPDF + Mongo + SSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libssl-dev libffi-dev build-essential poppler-utils \
+ && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# 🧩 Install only required system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# 🧠 Copy only backend dependencies (not frontend or .venv)
+# 🧩 Copy and install dependencies separately (layer cache)
 COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 🧩 Copy backend code only
+# 🧩 Copy the backend code
 COPY backend /app/backend
 
-# Expose the backend port
-EXPOSE 8000
+# 🔧 Environment
+ENV PYTHONUNBUFFERED=1 \
+    PORT=8000
 
-# 🚀 Run FastAPI
+# 🚀 Start FastAPI
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
