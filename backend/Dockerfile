@@ -1,30 +1,24 @@
-# ⚙️ Use slim Python image (lightweight and fast)
+# 🐍 Use lightweight base image
 FROM python:3.11-slim
 
-# 🧩 Install minimal system dependencies for PyMuPDF and Mongo
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libssl-dev \
-    libffi-dev \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
+# Prevent Python buffering
+ENV PYTHONUNBUFFERED=1
 
+# Set working directory
 WORKDIR /app
 
-# 🧩 Install backend dependencies
+# Copy only requirements first (for layer caching)
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
 
-# 🧩 Copy only backend code (avoid full repo)
-COPY backend /app/backend
+# Install system deps and Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libffi-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 🔧 Environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PORT=8000
+# Copy the backend code only
+COPY backend/ .
 
-EXPOSE 8000
-
-# 🚀 Launch FastAPI backend
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Expose port and start FastAPI
+ENV PORT=8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

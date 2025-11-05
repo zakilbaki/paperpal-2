@@ -1,21 +1,18 @@
-# Ignore local virtual environments
+# Ignore local environments
 .venv*
-venv/
+.venv311
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.db
+*.sqlite3
 
-# Ignore frontend and local dev files
+# Ignore node/frontend
 frontend/
 .git
 .gitignore
-.env
-.env.*
-.DS_Store
-
-# Ignore cache and build stuff
-*.db
-*.sqlite3
-*.log
-
+Dockerfile
+docker-compose.yml
+README.md
+render.yaml
