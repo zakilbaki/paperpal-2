@@ -1,10 +1,10 @@
-# Ignore virtual environments and local caches
+# Ignore local environments and cache
 .venv*
+venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.so
 *.db
 *.sqlite3
 *.log
@@ -13,4 +13,6 @@ __pycache__/
 frontend/
 .git
 .gitignore
+.env
+.env.*
 
