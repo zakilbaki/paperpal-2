@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import streamlit as st
 from api import BackendClient
+import threading
+import time
 
 # -----------------------------------------------------
 # ⚙️ Page config
@@ -16,6 +18,23 @@ st.set_page_config(
 # 🧩 Backend Client
 # -----------------------------------------------------
 client = BackendClient(base_url=os.getenv("BACKEND_BASE_URL", "http://localhost:8000"))
+def keep_backend_alive(interval=300):
+    """Ping backend every 5 minutes to prevent Render sleep."""
+    while True:
+        try:
+            res = client.session.get(f"{client.base_url}/api/v1/health/")
+            if res.status_code == 200:
+                print("💚 Backend alive")
+        except Exception as e:
+            print("⚠️ Keep-alive ping failed:", e)
+        time.sleep(interval)
+
+# Start background thread once when Streamlit loads
+if "keep_alive_thread" not in st.session_state:
+    st.session_state.keep_alive_thread = threading.Thread(
+        target=keep_backend_alive, args=(300,), daemon=True
+    )
+    st.session_state.keep_alive_thread.start()
 
 # -----------------------------------------------------
 # 🧠 Header
