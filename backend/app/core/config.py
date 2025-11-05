@@ -24,7 +24,7 @@ elif os.path.exists(LOCAL_ENV_PATH):
     load_dotenv(dotenv_path=LOCAL_ENV_PATH)
     print("[DEBUG] .env file loaded successfully from local file.")
 else:
-    print("[ERROR] .env file not found! Checked both Render and local paths.")
+    print("[INFO] No .env file found — using Render environment variables.")
 
 # -------------------------------------------------------
 # ⚙️ Settings model
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 
-    MONGODB_URI: str = Field(..., description="MongoDB connection string")
+    MONGODB_URI: str = Field(default=os.getenv("MONGODB_URI", ""), description="MongoDB connection string")
     MONGODB_DB: str = "paperpal_db"
 
     FRONTEND_ORIGIN: str = "http://localhost:8501"
@@ -49,4 +49,3 @@ settings = Settings()
 
 if __name__ == "__main__":
     print("✅ Loaded MONGODB_URI:", settings.MONGODB_URI)
-
