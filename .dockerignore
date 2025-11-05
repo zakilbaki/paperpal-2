@@ -1,18 +1,21 @@
-# Ignore local environments and cache
+# Ignore local virtual environments
 .venv*
 venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.db
-*.sqlite3
-*.log
 
-# Ignore frontend and git
+# Ignore frontend and local dev files
 frontend/
 .git
 .gitignore
 .env
 .env.*
+.DS_Store
+
+# Ignore cache and build stuff
+*.db
+*.sqlite3
+*.log
 
