@@ -12,8 +12,8 @@ yake==0.4.8
 numpy>=1.26.0
 scikit-learn==1.5.2
 sentence-transformers==2.2.2
-torch==2.9.0+cpu
-torchvision==0.24.0+cpu
-torchaudio==2.9.0+cpu
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
 --extra-index-url https://download.pytorch.org/whl/cpu
 PyMuPDF==1.24.9

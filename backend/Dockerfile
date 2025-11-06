@@ -1,11 +1,19 @@
+# Use lightweight Python image
 FROM python:3.11-slim
+
+# Set workdir
 WORKDIR /app
+
+# Install dependencies
 COPY backend/requirements.txt .
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc && \
-    pip install --no-cache-dir -r requirements.txt && \
-    apt-get remove -y build-essential gcc && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-COPY backend/ .
-ENV PORT=8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend source
+COPY backend/app ./app
+
+# Expose port for Render
+ENV PORT=10000
+ENV PYTHONUNBUFFERED=1
+
+# Start FastAPI
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
