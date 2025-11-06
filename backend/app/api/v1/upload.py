@@ -3,7 +3,7 @@ import time
 import fitz  # PyMuPDF
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from bson import ObjectId
-from backend.app.db.mongo import get_db
+from app.db.mongo import get_db
 
 router = APIRouter(tags=["papers"])
 

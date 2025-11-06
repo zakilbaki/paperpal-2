@@ -39,8 +39,8 @@ app.add_middleware(
 # -------------------------------------------------------
 try:
     # Local dev (project root context)
-    from backend.app.api.v1 import health, summarize, papers, compare
-from backend.app.api.v1 import compareexcept ModuleNotFoundError:
+    from app.api.v1 import health, summarize, papers, compare
+from app.api.v1 import compareexcept ModuleNotFoundError:
     # Render container (WORKDIR=/app)
     from app.api.v1 import health, summarize, papers, compare
 

@@ -44,8 +44,8 @@ app.add_middleware(
 # 🧱 Router imports
 # -------------------------------------------------------
 try:
-    from backend.app.api.v1 import health, papers, summarize, compare, upload
-    print("[DEBUG] Imported routers via backend.app.api.v1")
+    from app.api.v1 import health, papers, summarize, compare, upload
+    print("[DEBUG] Imported routers via app.api.v1")
 except Exception as e:
     print("[ERROR] Router import failed:", e)
     raise

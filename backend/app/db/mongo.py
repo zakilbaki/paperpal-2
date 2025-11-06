@@ -10,8 +10,8 @@ from pymongo.errors import ServerSelectionTimeoutError
 # 🧩 Config import (Render + Local compatible)
 # -------------------------------------------------------
 try:
-    # Local run (uvicorn backend.app.main:app)
-    from backend.app.core.config import settings
+    # Local run (uvicorn app.main:app)
+    from app.core.config import settings
 except ModuleNotFoundError:
     # Render container (starts at /app)
     from app.core.config import settings

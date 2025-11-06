@@ -6,9 +6,9 @@ from typing import Any
 # 🧩 Dual import logic (works both locally and on Render)
 # -------------------------------------------------------
 try:
-    # Local run (from project root): backend.app.*
-    from backend.app.db.mongo import ping
-    from backend.app.core.config import settings
+    # Local run (from project root): app.*
+    from app.db.mongo import ping
+    from app.core.config import settings
 except ModuleNotFoundError:
     # Render container (WORKDIR=/app): app.*
     from app.db.mongo import ping

@@ -6,9 +6,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 # 🧩 Dual import pattern for local + Render environments
 # -------------------------------------------------------
 try:
-    from backend.app.services.keywords import KeywordService  # local
-    from backend.app.models.schemas import KeywordsRequest, KeywordsResponse
-    from backend.app.core.config import settings
+    from app.services.keywords import KeywordService  # local
+    from app.models.schemas import KeywordsRequest, KeywordsResponse
+    from app.core.config import settings
 except ModuleNotFoundError:
     from app.services.keywords import KeywordService  # render
     from app.models.schemas import KeywordsRequest, KeywordsResponse
