@@ -1,12 +1,22 @@
 import os
 import pandas as pd
 import streamlit as st
-from api import BackendClient
+import requests
 import threading
 import time
 
 # -----------------------------------------------------
-# ⚙️ Page config
+# ⚙️ CONFIG
+# -----------------------------------------------------
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
+
+UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
+SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
+KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
+HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
+
+# -----------------------------------------------------
+# ⚙️ Page Config
 # -----------------------------------------------------
 st.set_page_config(
     page_title="🚀 PaperPal 2.0",
@@ -15,21 +25,19 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------
-# 🧩 Backend Client
+# 🧩 Backend Keep-Alive Thread
 # -----------------------------------------------------
-client = BackendClient(base_url=os.getenv("BACKEND_BASE_URL", "http://localhost:8000"))
 def keep_backend_alive(interval=300):
     """Ping backend every 5 minutes to prevent Render sleep."""
     while True:
         try:
-            res = client.session.get(f"{client.base_url}/api/v1/health/")
+            res = requests.get(HEALTH_URL, timeout=10)
             if res.status_code == 200:
                 print("💚 Backend alive")
         except Exception as e:
             print("⚠️ Keep-alive ping failed:", e)
         time.sleep(interval)
 
-# Start background thread once when Streamlit loads
 if "keep_alive_thread" not in st.session_state:
     st.session_state.keep_alive_thread = threading.Thread(
         target=keep_backend_alive, args=(300,), daemon=True
@@ -56,11 +64,17 @@ st.markdown("## 📤 Upload Your Paper")
 
 uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
 
+def upload_pdf(file_obj):
+    files = {"file": (file_obj.name, file_obj.getvalue(), file_obj.type)}
+    r = requests.post(UPLOAD_URL, files=files, timeout=(10, 180))
+    r.raise_for_status()
+    return r.json()
+
 if uploaded_file:
     if st.button("🚀 Upload Paper", use_container_width=True):
         with st.spinner("Uploading..."):
             try:
-                res = client.upload_pdf(uploaded_file.read(), uploaded_file.name)
+                res = upload_pdf(uploaded_file)
                 paper_id = res.get("paper_id") or res.get("data", {}).get("paper_id")
                 st.session_state["paper_id"] = paper_id
                 st.session_state["paper_name"] = uploaded_file.name
@@ -93,17 +107,26 @@ with tab1:
 
     use_cache = st.toggle("Use cached summary (if available)", value=True)
 
+    def summarize_paper(paper_id, summary_type, use_cache=True):
+        payload = {
+            "paper_id": paper_id,
+            "summary_type": summary_type,
+            "use_cache": use_cache
+        }
+        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 300))
+        r.raise_for_status()
+        return r.json()
+
     if st.button("🚀 Summarize Paper", use_container_width=True):
         with st.spinner(f"Generating {summary_type} summary... Please wait ⏳"):
             try:
-                res = client.summarize(
-                    paper_id=st.session_state["paper_id"],
-                    summary_type=summary_type,
-                    use_cache=use_cache,
+                res = summarize_paper(
+                    st.session_state["paper_id"],
+                    summary_type,
+                    use_cache
                 )
-
                 st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
-                st.info(res.get("summary", ""))
+                st.info(res.get("summary", "No summary returned."))
 
                 st.caption(
                     f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
@@ -111,6 +134,8 @@ with tab1:
                     f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
                 )
 
+            except requests.exceptions.Timeout:
+                st.error("⏰ Request timed out. Try again or shorten the PDF.")
             except Exception as e:
                 st.error(f"❌ Summarization failed: {e}")
 
@@ -122,10 +147,16 @@ with tab2:
 
     top_k = st.slider("How many top keywords to show?", 5, 40, 15, step=1)
 
+    def extract_keywords(paper_id, top_k=15):
+        payload = {"paper_id": paper_id, "top_k": top_k}
+        r = requests.post(KEYWORDS_URL, json=payload, timeout=(10, 120))
+        r.raise_for_status()
+        return r.json()
+
     if st.button("🚀 Extract Keywords", use_container_width=True):
         with st.spinner("Extracting keywords... ⏳"):
             try:
-                res = client.keywords(st.session_state["paper_id"], top_k)
+                res = extract_keywords(st.session_state["paper_id"], top_k)
                 st.success("✅ Keywords extracted successfully!")
 
                 kws = res.get("keywords", [])

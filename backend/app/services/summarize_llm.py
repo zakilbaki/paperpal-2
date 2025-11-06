@@ -5,26 +5,30 @@ import time
 import asyncio
 import torch
 import re
+import math
 
 # -------------------------------------------------------
 # ⚙️ CONFIGURATION
 # -------------------------------------------------------
 DEFAULT_MODEL = os.getenv("SUMMARY_MODEL_NAME", "facebook/bart-base")
+DETAILED_MODEL = os.getenv("SUMMARY_MODEL_DETAILED", "facebook/bart-large-cnn")
+
 MAX_TOKENS_PER_CHUNK = int(os.getenv("SUMMARY_MAX_TOKENS_PER_CHUNK", "700"))
 OVERLAP = int(os.getenv("SUMMARY_OVERLAP", "30"))
 PER_CHUNK_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_PER_CHUNK_MAX_NEW_TOKENS", "150"))
 REDUCE_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_REDUCE_MAX_NEW_TOKENS", "200"))
-MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "8"))  # concurrent threads
+MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "6"))  # 6 is safer on Render
+LOG_PREFIX = "[SUMMARY]"
 
-_tokenizer = None
-_summarizer = None
+_tokenizer_cache = {}
+_summarizer_cache = {}
 
 
 # -------------------------------------------------------
-# 🧹 Text Cleaning Utility
+# 🧹 Text Cleaning
 # -------------------------------------------------------
 def clean_text(text: str) -> str:
-    """Remove OCR artifacts, extra symbols, and garbage tokens."""
+    """Remove OCR artifacts, URLs, and weird characters."""
     text = re.sub(r"(TextColor|Filename|escription|▬|■|□|▲|▶|►|▪|●|–|—|‐|-)", " ", text)
     text = re.sub(r"http\S+|www\S+", "", text)
     text = re.sub(r"\s{2,}", " ", text)
@@ -34,112 +38,140 @@ def clean_text(text: str) -> str:
 
 
 # -------------------------------------------------------
-# 🔤 Tokenizer / Model loader
+# 🔤 Lazy Model Loading
 # -------------------------------------------------------
-def _get_tokenizer(model_name: str = DEFAULT_MODEL):
-    """Lazy-load tokenizer."""
-    global _tokenizer
-    if _tokenizer is None:
-        _tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-    return _tokenizer
+def _get_tokenizer(model_name: str):
+    """Cache tokenizer for reuse."""
+    if model_name not in _tokenizer_cache:
+        _tokenizer_cache[model_name] = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    return _tokenizer_cache[model_name]
 
 
-def _get_summarizer(model_name: str = DEFAULT_MODEL):
-    """Lazy-load summarization model (GPU auto-detect)."""
-    global _summarizer
-    if _summarizer is None:
+def _get_summarizer(model_name: str):
+    """Cache summarizer pipeline (auto CPU/GPU)."""
+    if model_name not in _summarizer_cache:
         device = 0 if torch.cuda.is_available() else -1
-        _summarizer = pipeline(
+        _summarizer_cache[model_name] = pipeline(
             "summarization",
             model=model_name,
             tokenizer=_get_tokenizer(model_name),
             device=device,
         )
-        print(f"[SUMMARY] 🚀 Loaded summarizer model: {model_name} (device={device})")
-    return _summarizer
+        print(f"{LOG_PREFIX} 🚀 Loaded summarizer: {model_name} (device={device})")
+    return _summarizer_cache[model_name]
 
 
 # -------------------------------------------------------
-# 🧩 Token-safe chunking
+# 🧩 Token-safe Chunking
 # -------------------------------------------------------
 def _chunk_text_token_safe(text: str, max_tokens: int = MAX_TOKENS_PER_CHUNK):
-    """Split long text into safe token chunks for summarization."""
-    tok = _get_tokenizer()
+    tok = _get_tokenizer(DEFAULT_MODEL)
     ids = tok.encode(text, add_special_tokens=False)
     stride = max_tokens - OVERLAP
     chunks = []
+
     for i in range(0, len(ids), stride):
         chunk_ids = ids[i:i + max_tokens]
         chunks.append(tok.decode(chunk_ids, skip_special_tokens=True))
         if i + max_tokens >= len(ids):
             break
+
     return chunks
 
 
 # -------------------------------------------------------
-# 🧠 Parallel summarization (multi-threaded)
+# ⚡ Async + Parallel Summarization
 # -------------------------------------------------------
-async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "medium") -> dict:
+async def summarize_text(
+    text: str,
+    max_tokens: int = 512,
+    summary_type: str = "medium",
+) -> dict:
     """
-    Chunk-aware summarization with true parallel processing and model switching.
-    - short / medium → bart-base
-    - detailed → bart-large-cnn
+    Chunk-aware summarization with concurrency and model switching.
+    - short / medium → facebook/bart-base
+    - detailed → facebook/bart-large-cnn
     """
-    start = time.time()
-    if not text.strip():
-        raise ValueError("Input text is empty.")
 
-    # 🧹 Clean text before summarizing
-    cleaned_text = clean_text(text)
-    if len(cleaned_text) < 50:
+    if not text or not text.strip():
+        raise ValueError("Empty text cannot be summarized.")
+
+    start_time = time.time()
+    cleaned = clean_text(text)
+    if len(cleaned) < 50:
         raise ValueError("Paper text too short after cleaning.")
 
-    # Pick model based on summary type
-    model_name = "facebook/bart-large-cnn" if summary_type.lower() == "detailed" else DEFAULT_MODEL
+    # Choose model and parameters adaptively
+    if summary_type.lower() == "detailed":
+        model_name = DETAILED_MODEL
+        max_new_tokens = min(REDUCE_MAX_NEW_TOKENS, 300)
+    elif summary_type.lower() == "short":
+        model_name = DEFAULT_MODEL
+        max_new_tokens = min(PER_CHUNK_MAX_NEW_TOKENS, 100)
+    else:
+        model_name = DEFAULT_MODEL
+        max_new_tokens = PER_CHUNK_MAX_NEW_TOKENS
+
     summarizer = _get_summarizer(model_name)
     tokenizer = _get_tokenizer(model_name)
 
-    chunks = _chunk_text_token_safe(cleaned_text, MAX_TOKENS_PER_CHUNK)
-    print(f"[SUMMARY] Total chunks: {len(chunks)} | Model: {model_name}")
+    # Split into manageable chunks
+    chunks = _chunk_text_token_safe(cleaned, MAX_TOKENS_PER_CHUNK)
+    print(f"{LOG_PREFIX} Total chunks: {len(chunks)} | Model: {model_name}")
 
-    # Define worker for one chunk
+    if not chunks:
+        return {"summary": "", "chunks": 0, "duration_ms": 0}
+
+    # Worker for a single chunk
     def summarize_chunk(chunk: str, idx: int):
-        token_len = len(tokenizer.encode(chunk, add_special_tokens=False))
-        if token_len > MAX_TOKENS_PER_CHUNK:
-            print(f"[SUMMARY] ⚠️ Skipping chunk {idx}: {token_len} tokens")
-            return ""
         try:
-            print(f"[SUMMARY] Summarizing chunk {idx}/{len(chunks)} ({token_len} tokens)")
+            token_len = len(tokenizer.encode(chunk, add_special_tokens=False))
+            print(f"{LOG_PREFIX} Summarizing chunk {idx}/{len(chunks)} ({token_len} tokens)")
             result = summarizer(
                 chunk,
-                max_length=min(max_tokens, PER_CHUNK_MAX_NEW_TOKENS),
-                min_length=int(min(max_tokens, PER_CHUNK_MAX_NEW_TOKENS) * 0.4),
+                max_new_tokens=max_new_tokens,  # ✅ only this argument
+                min_length=int(max_new_tokens * 0.4),
                 do_sample=False,
             )
             return result[0]["summary_text"].strip()
         except Exception as e:
-            print(f"[SUMMARY] ❌ Chunk {idx} failed: {e}")
+            print(f"{LOG_PREFIX} ❌ Chunk {idx} failed: {e}")
             return ""
 
-    # Run all chunks concurrently
+    # Run concurrent summarization
     loop = asyncio.get_event_loop()
+    summaries = []
     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(chunks))) as executor:
         tasks = [loop.run_in_executor(executor, summarize_chunk, ch, i + 1)
                  for i, ch in enumerate(chunks)]
         summaries = await asyncio.gather(*tasks)
 
     summaries = [s for s in summaries if s]
-    final_summary = " ".join(summaries).strip()
-    duration = int((time.time() - start) * 1000)
+    combined_summary = " ".join(summaries).strip()
 
-    print(f"[SUMMARY] ✅ Completed {len(summaries)} summaries in {duration} ms")
+    # Optionally reduce summaries to shorter final text
+    if len(summaries) > 1 and summary_type.lower() in {"short", "medium"}:
+        try:
+            print(f"{LOG_PREFIX} 🔁 Reducing {len(summaries)} partial summaries...")
+            reduced = summarizer(
+                " ".join(summaries),
+                max_new_tokens=max_new_tokens,
+                min_length=int(max_new_tokens * 0.5),
+                do_sample=False,
+            )[0]["summary_text"].strip()
+            combined_summary = reduced
+        except Exception as e:
+            print(f"{LOG_PREFIX} ⚠️ Reduction step failed: {e}")
+
+    duration_ms = int((time.time() - start_time) * 1000)
+    print(f"{LOG_PREFIX} ✅ Completed {len(summaries)} chunks in {duration_ms} ms")
 
     return {
-        "summary": final_summary,
+        "summary": combined_summary,
         "chunks": len(chunks),
         "successful_chunks": len(summaries),
-        "duration_ms": duration,
-        "max_tokens_used": max_tokens,
+        "duration_ms": duration_ms,
+        "max_new_tokens": max_new_tokens,
         "model_name": model_name,
         "cached": False,
     }
