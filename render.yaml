@@ -1,10 +1,10 @@
 services:
   # 🧠 Backend (FastAPI)
   - type: web
-    name: paperpal-backend
+    name: paperpal-backend1          # ✅ must match your deployed backend name
     env: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000   # ✅ fixed import path & port
     plan: free
     envVars:
       - key: APP_NAME
@@ -12,7 +12,7 @@ services:
       - key: APP_ENV
         value: prod
       - key: MONGODB_URI
-        sync: false      # secure: will set in dashboard
+        sync: false                  # secure: set in Render dashboard
       - key: MONGODB_DB
         value: paperpal_db
       - key: FRONTEND_ORIGIN
@@ -23,11 +23,11 @@ services:
     name: paperpal-frontend
     env: python
     buildCommand: pip install -r frontend/requirements.txt
-    startCommand: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    startCommand: streamlit run streamlit_app.py --server.port=10000 --server.address=0.0.0.0
     plan: free
     envVars:
       - key: BACKEND_BASE_URL
-        value: https://paperpal-backend.onrender.com
+        value: https://paperpal-backend1.onrender.com   # ✅ points to your live backend
       - key: API_PREFIX
         value: /api/v1
       - key: API_UPLOAD_ROUTE
