@@ -4,7 +4,8 @@ services:
     name: paperpal-backend1          # ✅ must match your deployed backend name
     env: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000   # ✅ fixed import path & port
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   # ✅ fixed import path & port
     plan: free
     envVars:
       - key: APP_NAME
