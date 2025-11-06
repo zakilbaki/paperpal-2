@@ -1,33 +1,46 @@
-# Python
+# ───────────────────────────────
+# 🐍 Python
+# ───────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-*.env
-.DS_Store
 
-# Virtual environments
+# ───────────────────────────────
+# 🧠 Environment / Secrets
+# ───────────────────────────────
+.env
+*/.env
+*.env.*
+.env.save
+
+# ───────────────────────────────
+# 💻 Virtual Environments
+# ───────────────────────────────
 venv/
 env/
 .venv/
+.venv311/
 
-# Local files
-temp/
+# ───────────────────────────────
+# 🧾 Logs / Local files
+# ───────────────────────────────
 *.log
 *.sqlite3
+temp/
+.DS_Store
 
-# Streamlit cache
+# ───────────────────────────────
+# 🎨 Streamlit Cache
+# ───────────────────────────────
 .streamlit/
 
-# Jupyter
+# ───────────────────────────────
+# 📓 Jupyter
+# ───────────────────────────────
 .ipynb_checkpoints/
-venv/
-.venv/
-.venv311/
-__pycache__/
-*.pyc
-venv/
-.venv/
-.venv311/
-__pycache__/
-*.pyc
+
+# ───────────────────────────────
+# 🧰 System junk
+# ───────────────────────────────
+__MACOSX/

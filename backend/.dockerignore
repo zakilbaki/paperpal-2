@@ -1,0 +1,20 @@
+# Ignore environment files and secrets
+.env
+*/.env
+.env.*
+
+# Ignore caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.venv311/
+
+# Ignore build logs and local artifacts
+*.log
+temp/
+.DS_Store
+.streamlit/
+.ipynb_checkpoints/
+
