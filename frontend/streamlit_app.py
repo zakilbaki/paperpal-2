@@ -11,8 +11,7 @@ import time
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
 
 UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
-SUMMARIZE_ASYNC_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize_async"
-JOB_STATUS_URL = f"{BACKEND_BASE_URL}/api/v1/jobs"
+SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"   # ✅ fixed
 KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
 HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
 
@@ -108,61 +107,37 @@ with tab1:
 
     use_cache = st.toggle("Use cached summary (if available)", value=True)
 
-    # --- Helpers ---
-    def summarize_paper_async(paper_id, summary_type="medium", use_cache=True):
-        payload = {"paper_id": paper_id, "summary_type": summary_type, "use_cache": use_cache}
-        r = requests.post(SUMMARIZE_ASYNC_URL, json=payload, timeout=(10, 30))
+    def summarize_paper(paper_id, summary_type, use_cache=True):
+        payload = {
+            "paper_id": paper_id,
+            "summary_type": summary_type,
+            "use_cache": use_cache
+        }
+        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 300))
         r.raise_for_status()
-        return r.json()["job_id"]
+        return r.json()
 
-    def poll_job(job_id, max_wait_s=900, interval_s=2):
-        """Poll backend until job completes or times out."""
-        start = time.time()
-        with st.spinner("Summarizing in background..."):
-            while True:
-                r = requests.get(f"{JOB_STATUS_URL}/{job_id}", timeout=(5, 20))
-                if r.status_code == 404:
-                    time.sleep(interval_s)
-                    continue
-                r.raise_for_status()
-                data = r.json()
-                status = data.get("status")
-                if status in ("done", "error"):
-                    return data
-                if time.time() - start > max_wait_s:
-                    return {"status": "error", "error": "Polling timed out"}
-                time.sleep(interval_s)
-
-    # --- Button ---
     if st.button("🚀 Summarize Paper", use_container_width=True):
-        try:
-            with st.spinner("Queueing summarization job..."):
-                job_id = summarize_paper_async(
+        with st.spinner(f"Generating {summary_type} summary... Please wait ⏳"):
+            try:
+                res = summarize_paper(
                     st.session_state["paper_id"],
                     summary_type,
                     use_cache
                 )
-            st.info(f"📦 Job queued: `{job_id}`")
-
-            res = poll_job(job_id)
-
-            if res.get("status") == "done":
                 st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
                 st.info(res.get("summary", "No summary returned."))
 
                 st.caption(
                     f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
                     f"🔢 {res.get('chunks', 0)} chunks • "
-                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'} • "
-                    f"🧠 {res.get('model_name','')}"
+                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
                 )
 
-            else:
-                st.error(f"❌ Job failed: {res.get('error', 'Unknown error')}")
-        except requests.exceptions.Timeout:
-            st.error("⏰ Backend request timed out while starting job.")
-        except Exception as e:
-            st.error(f"❌ Summarization failed: {e}")
+            except requests.exceptions.Timeout:
+                st.error("⏰ Request timed out. Try again or shorten the PDF.")
+            except Exception as e:
+                st.error(f"❌ Summarization failed: {e}")
 
 # -----------------------------------------------------
 # 🔑 KEYWORDS TAB
