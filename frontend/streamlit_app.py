@@ -11,12 +11,13 @@ import time
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
 
 UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
-SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
+SUMMARIZE_ASYNC_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize_async"
+JOB_STATUS_URL = f"{BACKEND_BASE_URL}/api/v1/jobs"
 KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
 HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
 
 # -----------------------------------------------------
-# ⚙️ Page Config
+# ⚙️ PAGE CONFIG
 # -----------------------------------------------------
 st.set_page_config(
     page_title="🚀 PaperPal 2.0",
@@ -25,7 +26,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------
-# 🧩 Backend Keep-Alive Thread
+# 🧩 BACKEND KEEP-ALIVE
 # -----------------------------------------------------
 def keep_backend_alive(interval=300):
     """Ping backend every 5 minutes to prevent Render sleep."""
@@ -45,7 +46,7 @@ if "keep_alive_thread" not in st.session_state:
     st.session_state.keep_alive_thread.start()
 
 # -----------------------------------------------------
-# 🧠 Header
+# 🧠 HEADER
 # -----------------------------------------------------
 st.markdown(
     """
@@ -58,7 +59,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------
-# 📤 Upload Section
+# 📤 UPLOAD SECTION
 # -----------------------------------------------------
 st.markdown("## 📤 Upload Your Paper")
 
@@ -88,7 +89,7 @@ if "paper_id" not in st.session_state:
     st.stop()
 
 # -----------------------------------------------------
-# 🧭 Tabs
+# 🧭 TABS
 # -----------------------------------------------------
 tab1, tab2 = st.tabs(["🧠 Summarize", "🔑 Keywords"])
 
@@ -107,37 +108,61 @@ with tab1:
 
     use_cache = st.toggle("Use cached summary (if available)", value=True)
 
-    def summarize_paper(paper_id, summary_type, use_cache=True):
-        payload = {
-            "paper_id": paper_id,
-            "summary_type": summary_type,
-            "use_cache": use_cache
-        }
-        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 300))
+    # --- Helpers ---
+    def summarize_paper_async(paper_id, summary_type="medium", use_cache=True):
+        payload = {"paper_id": paper_id, "summary_type": summary_type, "use_cache": use_cache}
+        r = requests.post(SUMMARIZE_ASYNC_URL, json=payload, timeout=(10, 30))
         r.raise_for_status()
-        return r.json()
+        return r.json()["job_id"]
 
+    def poll_job(job_id, max_wait_s=900, interval_s=2):
+        """Poll backend until job completes or times out."""
+        start = time.time()
+        with st.spinner("Summarizing in background..."):
+            while True:
+                r = requests.get(f"{JOB_STATUS_URL}/{job_id}", timeout=(5, 20))
+                if r.status_code == 404:
+                    time.sleep(interval_s)
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                status = data.get("status")
+                if status in ("done", "error"):
+                    return data
+                if time.time() - start > max_wait_s:
+                    return {"status": "error", "error": "Polling timed out"}
+                time.sleep(interval_s)
+
+    # --- Button ---
     if st.button("🚀 Summarize Paper", use_container_width=True):
-        with st.spinner(f"Generating {summary_type} summary... Please wait ⏳"):
-            try:
-                res = summarize_paper(
+        try:
+            with st.spinner("Queueing summarization job..."):
+                job_id = summarize_paper_async(
                     st.session_state["paper_id"],
                     summary_type,
                     use_cache
                 )
+            st.info(f"📦 Job queued: `{job_id}`")
+
+            res = poll_job(job_id)
+
+            if res.get("status") == "done":
                 st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
                 st.info(res.get("summary", "No summary returned."))
 
                 st.caption(
                     f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
                     f"🔢 {res.get('chunks', 0)} chunks • "
-                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
+                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'} • "
+                    f"🧠 {res.get('model_name','')}"
                 )
 
-            except requests.exceptions.Timeout:
-                st.error("⏰ Request timed out. Try again or shorten the PDF.")
-            except Exception as e:
-                st.error(f"❌ Summarization failed: {e}")
+            else:
+                st.error(f"❌ Job failed: {res.get('error', 'Unknown error')}")
+        except requests.exceptions.Timeout:
+            st.error("⏰ Backend request timed out while starting job.")
+        except Exception as e:
+            st.error(f"❌ Summarization failed: {e}")
 
 # -----------------------------------------------------
 # 🔑 KEYWORDS TAB
@@ -187,7 +212,7 @@ with tab2:
                 st.error(f"❌ Keyword extraction failed: {e}")
 
 # -----------------------------------------------------
-# 🧩 Footer
+# 🧩 FOOTER
 # -----------------------------------------------------
 st.markdown("---")
 st.caption("🚀 PaperPal 2.0 — Powered by FastAPI & Streamlit • 2025")
