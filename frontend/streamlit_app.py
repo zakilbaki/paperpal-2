@@ -6,46 +6,110 @@ import threading
 import time
 
 # -----------------------------------------------------
-# ⚙️ CONFIG
+# CONFIG
 # -----------------------------------------------------
 DEFAULT_BACKEND = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
-MAX_FILE_MB = 1
-MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
+
+st.set_page_config(
+    page_title="PaperPal 2.0",
+    page_icon="📄",
+    layout="wide",
+)
 
 # -----------------------------------------------------
-# ⚙️ PAGE CONFIG
+# STYLING
 # -----------------------------------------------------
-st.set_page_config(page_title="🚀 PaperPal 2.0", page_icon="🧠", layout="wide")
+st.markdown("""
+<style>
+/* Main background */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
+    color: #f5f5f5;
+}
+
+/* Titles */
+h1, h2, h3 {
+    color: #f5f5f5 !important;
+    font-weight: 700;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: #101418 !important;
+    color: #d1d5db;
+}
+
+/* Upload box */
+section[data-testid="stFileUploader"] > div {
+    border: 2px dashed #00b4d8;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+}
+section[data-testid="stFileUploader"] p {
+    color: #e0e0e0 !important;
+}
+
+/* Buttons */
+.stButton>button {
+    background: linear-gradient(90deg, #00b4d8, #0077b6);
+    color: white;
+    border: none;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+.stButton>button:hover {
+    background: linear-gradient(90deg, #0096c7, #023e8a);
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px 6px 0 0;
+    color: #cbd5e1;
+    padding: 10px 20px;
+    font-weight: 500;
+}
+.stTabs [aria-selected="true"] {
+    background: #00b4d8;
+    color: #ffffff !important;
+}
+
+/* Progress bar */
+[data-testid="stProgressBar"] div div {
+    background-color: #00b4d8 !important;
+}
+
+/* Cards and containers */
+div.block-container {
+    padding-top: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # -----------------------------------------------------
-# 🧩 SIDEBAR SETTINGS
+# BACKEND SETTINGS
 # -----------------------------------------------------
-with st.sidebar.expander("⚙️ Backend Settings"):
-    BACKEND_BASE_URL = st.text_input(
-        "Backend URL", DEFAULT_BACKEND,
-        help="Switch between local and Render backend (e.g. http://localhost:8000)"
-    )
+with st.sidebar.expander("Backend Settings", expanded=False):
+    BACKEND_BASE_URL = st.text_input("Backend URL", DEFAULT_BACKEND)
 
 UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
 SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
 KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
 HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
 
-if "paper_id" in st.session_state:
-    st.sidebar.success(f"📄 Active paper: {st.session_state['paper_name']}")
-else:
-    st.sidebar.info("📁 Upload a paper to get started.")
-
 # -----------------------------------------------------
-# 🧩 BACKEND KEEP-ALIVE
+# KEEP-ALIVE THREAD
 # -----------------------------------------------------
 def keep_backend_alive(interval=300):
     while True:
         try:
             requests.get(HEALTH_URL, timeout=10)
-            print("💚 Backend alive")
-        except Exception as e:
-            print("⚠️ Keep-alive ping failed:", e)
+        except:
+            pass
         time.sleep(interval)
 
 if "keep_alive_thread" not in st.session_state:
@@ -55,40 +119,26 @@ if "keep_alive_thread" not in st.session_state:
     st.session_state.keep_alive_thread.start()
 
 # -----------------------------------------------------
-# 🧠 HEADER
+# HEADER
 # -----------------------------------------------------
-st.markdown(
-    """
-    <div style='text-align:center;'>
-        <h1>🚀 <b>PaperPal 2.0</b></h1>
-        <p style='color:gray;'>Upload, summarize, and extract keywords from research papers effortlessly.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<div style='text-align:center; margin-bottom: 2rem;'>
+    <h1 style='font-size:2.6rem;'>PaperPal 2.0</h1>
+    <p style='color:#cbd5e1; font-size:1.1rem;'>AI-powered summarization and keyword extraction for research papers</p>
+</div>
+""", unsafe_allow_html=True)
 
 # -----------------------------------------------------
-# 📤 UPLOAD SECTION
+# UPLOAD SECTION
 # -----------------------------------------------------
-st.markdown("## 📤 Upload Your Paper")
-st.markdown(f"**⚠️ Max file size: {MAX_FILE_MB} MB**")
+st.markdown("### Upload Your Paper")
 
-st.markdown(
-    """
-    <style>
-    section[data-testid="stFileUploaderDropzone"] div[aria-label] {
-        display: none !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+uploaded_file = st.file_uploader("Choose a PDF (max 1 MB)", type=["pdf"])
 
-uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
-
-if uploaded_file and uploaded_file.size > MAX_FILE_BYTES:
-    st.error(f"❌ File too large (limit {MAX_FILE_MB} MB). Please upload a smaller paper.")
-    st.stop()
+if uploaded_file:
+    if uploaded_file.size > 1 * 1024 * 1024:
+        st.error("File too large (limit 1 MB).")
+        st.stop()
 
 @st.cache_data(show_spinner=False)
 def upload_pdf_cached(file_obj):
@@ -97,121 +147,82 @@ def upload_pdf_cached(file_obj):
     r.raise_for_status()
     return r.json()
 
-if uploaded_file:
-    if st.button("🚀 Upload Paper", use_container_width=True):
-        with st.spinner("Uploading..."):
-            try:
-                res = upload_pdf_cached(uploaded_file)
-                paper_id = res.get("paper_id") or res.get("data", {}).get("paper_id")
-                st.session_state["paper_id"] = paper_id
-                st.session_state["paper_name"] = uploaded_file.name
-                st.success(f"✅ Uploaded successfully: {uploaded_file.name}")
-                st.caption(f"🆔 Paper ID: `{paper_id}`")
-            except Exception as e:
-                st.error(f"❌ Upload failed: {e}")
+if uploaded_file and st.button("Upload Paper", use_container_width=True):
+    with st.spinner("Uploading..."):
+        try:
+            res = upload_pdf_cached(uploaded_file)
+            paper_id = res.get("paper_id")
+            st.session_state["paper_id"] = paper_id
+            st.session_state["paper_name"] = uploaded_file.name
+            st.success(f"Uploaded successfully: {uploaded_file.name}")
+            st.caption(f"Paper ID: `{paper_id}`")
+        except Exception as e:
+            st.error(f"Upload failed: {e}")
 
 if "paper_id" not in st.session_state:
-    st.info("⬆️ Please upload a paper first.")
     st.stop()
 
 # -----------------------------------------------------
-# 🧭 TABS
+# TABS
 # -----------------------------------------------------
-tab1, tab2 = st.tabs(["🧠 Summarize", "🔑 Keywords"])
+tab1, tab2 = st.tabs(["Summarize", "Keywords"])
 
 # -----------------------------------------------------
-# 🧠 SUMMARIZATION TAB
+# SUMMARIZATION TAB
 # -----------------------------------------------------
 with tab1:
-    st.markdown("### ✍️ Generate Summary")
-
-    summary_type = st.radio(
-        "Select summary level:",
-        ["short", "medium", "detailed"],
-        horizontal=True,
-    )
-    use_cache = st.toggle("Use cached summary (if available)", value=True)
-
+    st.subheader("Generate Summary")
+    summary_type = st.radio("Summary level", ["short", "medium", "detailed"], horizontal=True)
+    use_cache = st.toggle("Use cached summary", value=True)
     progress = st.progress(0)
-    status_text = st.empty()
+    status = st.empty()
 
-    def summarize_paper(paper_id, summary_type, use_cache=True):
-        payload = {"paper_id": paper_id, "summary_type": summary_type, "use_cache": use_cache}
+    def summarize_paper(pid, stype, cache=True):
+        payload = {"paper_id": pid, "summary_type": stype, "use_cache": cache}
         r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 400))
         r.raise_for_status()
         return r.json()
 
-    if st.button("🚀 Summarize Paper", use_container_width=True):
+    if st.button("Generate Summary", use_container_width=True):
         try:
             for i in range(0, 95, 5):
                 progress.progress(i)
-                status_text.text(f"⏳ Summarizing... ({i}%)")
-                time.sleep(0.25)
-
+                status.text(f"Summarizing... {i}%")
+                time.sleep(0.15)
             res = summarize_paper(st.session_state["paper_id"], summary_type, use_cache)
-
             progress.progress(100)
-            status_text.text("✅ Done!")
-
-            st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
-            st.info(res.get("summary", "No summary returned."))
-
+            status.text("Done.")
+            with st.container():
+                st.markdown(
+                    f"<div style='background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;'>"
+                    f"{res.get('summary','No summary returned.')}</div>",
+                    unsafe_allow_html=True,
+                )
             st.caption(
-                f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
-                f"🔢 {res.get('chunks', 0)} chunks • "
-                f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
+                f"Time: {res.get('duration_ms',0)/1000:.2f}s • "
+                f"Chunks: {res.get('chunks',0)} • "
+                f"{'Cached' if res.get('cached') else 'Fresh generation'}"
             )
-
-        except requests.exceptions.Timeout:
-            st.error("⏰ Request timed out. Try again or shorten the PDF.")
         except Exception as e:
-            st.error(f"❌ Summarization failed: {e}")
+            st.error(f"Summarization failed: {e}")
 
 # -----------------------------------------------------
-# 🔑 KEYWORDS TAB
+# KEYWORDS TAB
 # -----------------------------------------------------
 with tab2:
-    st.markdown("### 🧩 Keyword Ranking")
-    top_k = st.slider("How many top keywords to show?", 5, 40, 15, step=1)
-
-    def extract_keywords(paper_id, top_k=15):
-        payload = {"paper_id": paper_id, "top_k": top_k}
-        r = requests.post(KEYWORDS_URL, json=payload, timeout=(10, 120))
-        r.raise_for_status()
-        return r.json()
-
-    if st.button("🚀 Extract Keywords", use_container_width=True):
-        with st.spinner("Extracting keywords... ⏳"):
+    st.subheader("Keyword Extraction")
+    top_k = st.slider("Number of top keywords", 5, 40, 15)
+    if st.button("Extract Keywords", use_container_width=True):
+        with st.spinner("Extracting..."):
             try:
-                res = extract_keywords(st.session_state["paper_id"], top_k)
-                st.success("✅ Keywords extracted successfully!")
-
+                res = requests.post(KEYWORDS_URL, json={"paper_id": st.session_state["paper_id"], "top_k": top_k}).json()
                 kws = res.get("keywords", [])
-                if not kws:
-                    st.info("No keywords found.")
+                if kws:
+                    df = pd.DataFrame(kws).sort_values("score", ascending=False)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
                 else:
-                    df = pd.DataFrame(kws)
-                    if "score" in df.columns:
-                        df = df.sort_values("score", ascending=True).reset_index(drop=True)
-                    df["rank"] = df.index + 1
-                    df = df[["rank", "text", "score"]]
-
-                    st.markdown("#### 🏅 Ranked Keywords")
-                    for _, row in df.iterrows():
-                        st.markdown(
-                            f"<div style='display:flex;justify-content:space-between;align-items:center;"
-                            f"padding:8px 12px;margin:6px 0;border-radius:10px;background:#1f1f1f;'>"
-                            f"<div><b>#{int(row['rank'])}</b> — {row['text']}</div>"
-                            f"<div style='font-size:12px;color:#9aa0a6;'>score: {row['score']:.5f}</div>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                    with st.expander("See as table"):
-                        st.dataframe(df, hide_index=True, use_container_width=True)
+                    st.warning("No keywords found.")
             except Exception as e:
-                st.error(f"❌ Keyword extraction failed: {e}")
+                st.error(f"Extraction failed: {e}")
 
-# -----------------------------------------------------
-# 🧩 FOOTER
-# -----------------------------------
+st.markdown("<hr><center style='color:#94a3b8;'>PaperPal 2.0 — FastAPI × Streamlit • 2025</center>", unsafe_allow_html=True)
