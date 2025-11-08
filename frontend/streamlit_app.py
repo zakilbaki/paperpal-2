@@ -9,15 +9,13 @@ import time
 # ⚙️ CONFIG
 # -----------------------------------------------------
 DEFAULT_BACKEND = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
+MAX_FILE_MB = 1
+MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
 
 # -----------------------------------------------------
 # ⚙️ PAGE CONFIG
 # -----------------------------------------------------
-st.set_page_config(
-    page_title="🚀 PaperPal 2.0",
-    page_icon="🧠",
-    layout="wide",
-)
+st.set_page_config(page_title="🚀 PaperPal 2.0", page_icon="🧠", layout="wide")
 
 # -----------------------------------------------------
 # 🧩 SIDEBAR SETTINGS
@@ -33,7 +31,6 @@ SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
 KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
 HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
 
-# Restore paper state
 if "paper_id" in st.session_state:
     st.sidebar.success(f"📄 Active paper: {st.session_state['paper_name']}")
 else:
@@ -43,12 +40,10 @@ else:
 # 🧩 BACKEND KEEP-ALIVE
 # -----------------------------------------------------
 def keep_backend_alive(interval=300):
-    """Ping backend every 5 minutes to prevent Render sleep."""
     while True:
         try:
-            res = requests.get(HEALTH_URL, timeout=10)
-            if res.status_code == 200:
-                print("💚 Backend alive")
+            requests.get(HEALTH_URL, timeout=10)
+            print("💚 Backend alive")
         except Exception as e:
             print("⚠️ Keep-alive ping failed:", e)
         time.sleep(interval)
@@ -66,7 +61,7 @@ st.markdown(
     """
     <div style='text-align:center;'>
         <h1>🚀 <b>PaperPal 2.0</b></h1>
-        <p style='color:gray;'>Upload, summarize and extract keywords from research papers effortlessly.</p>
+        <p style='color:gray;'>Upload, summarize, and extract keywords from research papers effortlessly.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -76,14 +71,24 @@ st.markdown(
 # 📤 UPLOAD SECTION
 # -----------------------------------------------------
 st.markdown("## 📤 Upload Your Paper")
-st.markdown("**⚠️ Max file size: 1 MB (typical research paper length)**")
+st.markdown(f"**⚠️ Max file size: {MAX_FILE_MB} MB**")
+
+st.markdown(
+    """
+    <style>
+    section[data-testid="stFileUploaderDropzone"] div[aria-label] {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
 
-if uploaded_file:
-    if uploaded_file.size > 1 * 1024 * 1024:
-        st.error("❌ File too large (limit 1 MB). Please upload a smaller paper.")
-        st.stop()
+if uploaded_file and uploaded_file.size > MAX_FILE_BYTES:
+    st.error(f"❌ File too large (limit {MAX_FILE_MB} MB). Please upload a smaller paper.")
+    st.stop()
 
 @st.cache_data(show_spinner=False)
 def upload_pdf_cached(file_obj):
@@ -137,12 +142,11 @@ with tab1:
         return r.json()
 
     if st.button("🚀 Summarize Paper", use_container_width=True):
-        start_time = time.time()
         try:
-            for i in range(0, 90, 10):
+            for i in range(0, 95, 5):
                 progress.progress(i)
                 status_text.text(f"⏳ Summarizing... ({i}%)")
-                time.sleep(0.3)
+                time.sleep(0.25)
 
             res = summarize_paper(st.session_state["paper_id"], summary_type, use_cache)
 
@@ -153,8 +157,8 @@ with tab1:
             st.info(res.get("summary", "No summary returned."))
 
             st.caption(
-                f"🕒 {res.get('duration_ms',0)/1000:.2f}s • "
-                f"🔢 {res.get('chunks',0)} chunks • "
+                f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
+                f"🔢 {res.get('chunks', 0)} chunks • "
                 f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
             )
 
@@ -168,7 +172,6 @@ with tab1:
 # -----------------------------------------------------
 with tab2:
     st.markdown("### 🧩 Keyword Ranking")
-
     top_k = st.slider("How many top keywords to show?", 5, 40, 15, step=1)
 
     def extract_keywords(paper_id, top_k=15):
@@ -211,6 +214,4 @@ with tab2:
 
 # -----------------------------------------------------
 # 🧩 FOOTER
-# -----------------------------------------------------
-st.markdown("---")
-st.caption("🚀 PaperPal 2.0 — Powered by FastAPI & Streamlit • 2025")
+# -----------------------------------
