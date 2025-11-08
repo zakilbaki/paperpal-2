@@ -8,12 +8,7 @@ import time
 # -----------------------------------------------------
 # ⚙️ CONFIG
 # -----------------------------------------------------
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
-
-UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
-SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"   # ✅ fixed
-KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
-HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
+DEFAULT_BACKEND = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
 
 # -----------------------------------------------------
 # ⚙️ PAGE CONFIG
@@ -23,6 +18,26 @@ st.set_page_config(
     page_icon="🧠",
     layout="wide",
 )
+
+# -----------------------------------------------------
+# 🧩 SIDEBAR SETTINGS
+# -----------------------------------------------------
+with st.sidebar.expander("⚙️ Backend Settings"):
+    BACKEND_BASE_URL = st.text_input(
+        "Backend URL", DEFAULT_BACKEND,
+        help="Switch between local and Render backend (e.g. http://localhost:8000)"
+    )
+
+UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
+SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
+KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
+HEALTH_URL = f"{BACKEND_BASE_URL}/api/v1/health/"
+
+# Restore paper state
+if "paper_id" in st.session_state:
+    st.sidebar.success(f"📄 Active paper: {st.session_state['paper_name']}")
+else:
+    st.sidebar.info("📁 Upload a paper to get started.")
 
 # -----------------------------------------------------
 # 🧩 BACKEND KEEP-ALIVE
@@ -37,6 +52,7 @@ def keep_backend_alive(interval=300):
         except Exception as e:
             print("⚠️ Keep-alive ping failed:", e)
         time.sleep(interval)
+
 
 if "keep_alive_thread" not in st.session_state:
     st.session_state.keep_alive_thread = threading.Thread(
@@ -62,19 +78,20 @@ st.markdown(
 # -----------------------------------------------------
 st.markdown("## 📤 Upload Your Paper")
 
-uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
-
-def upload_pdf(file_obj):
+@st.cache_data(show_spinner=False)
+def upload_pdf_cached(file_obj):
     files = {"file": (file_obj.name, file_obj.getvalue(), file_obj.type)}
     r = requests.post(UPLOAD_URL, files=files, timeout=(10, 180))
     r.raise_for_status()
     return r.json()
 
+uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
+
 if uploaded_file:
     if st.button("🚀 Upload Paper", use_container_width=True):
         with st.spinner("Uploading..."):
             try:
-                res = upload_pdf(uploaded_file)
+                res = upload_pdf_cached(uploaded_file)
                 paper_id = res.get("paper_id") or res.get("data", {}).get("paper_id")
                 st.session_state["paper_id"] = paper_id
                 st.session_state["paper_name"] = uploaded_file.name
@@ -93,7 +110,7 @@ if "paper_id" not in st.session_state:
 tab1, tab2 = st.tabs(["🧠 Summarize", "🔑 Keywords"])
 
 # -----------------------------------------------------
-# 🧠 SUMMARIZATION TAB
+# 🧠 SUMMARIZATION TAB (Optimized)
 # -----------------------------------------------------
 with tab1:
     st.markdown("### ✍️ Generate Summary")
@@ -102,10 +119,13 @@ with tab1:
         "Select summary level:",
         ["short", "medium", "detailed"],
         horizontal=True,
-        help="Choose how detailed you want the summary to be.",
     )
 
     use_cache = st.toggle("Use cached summary (if available)", value=True)
+
+    # Cancel control
+    if "stop_flag" not in st.session_state:
+        st.session_state["stop_flag"] = False
 
     def summarize_paper(paper_id, summary_type, use_cache=True):
         payload = {
@@ -113,20 +133,42 @@ with tab1:
             "summary_type": summary_type,
             "use_cache": use_cache
         }
-        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 300))
+        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 400))
         r.raise_for_status()
         return r.json()
 
+    progress = st.progress(0)
+    status_text = st.empty()
+
     if st.button("🚀 Summarize Paper", use_container_width=True):
-        with st.spinner(f"Generating {summary_type} summary... Please wait ⏳"):
-            try:
+        st.session_state["stop_flag"] = False
+        start_time = time.time()
+        try:
+            for i in range(0, 100, 5):
+                if st.session_state.get("stop_flag", False):
+                    st.warning("🛑 Summarization canceled.")
+                    break
+                progress.progress(i + 5)
+                status_text.text(f"⏳ Summarizing... ({i + 5}%)")
+                time.sleep(0.3)
+
+            if not st.session_state.get("stop_flag", False):
                 res = summarize_paper(
                     st.session_state["paper_id"],
                     summary_type,
                     use_cache
                 )
-                st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
-                st.info(res.get("summary", "No summary returned."))
+
+                progress.progress(100)
+                status_text.text("✅ Done!")
+
+                with st.expander("🧾 View Full Summary", expanded=True):
+                    st.write(res.get("summary", "No summary returned."))
+
+                with st.expander("📊 Summary Metrics"):
+                    st.metric("Chunks processed", res.get("chunks", 0))
+                    st.metric("Time (s)", round(res.get("duration_ms", 0)/1000, 2))
+                    st.metric("Model", res.get("model_name", "Unknown"))
 
                 st.caption(
                     f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
@@ -134,10 +176,13 @@ with tab1:
                     f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
                 )
 
-            except requests.exceptions.Timeout:
-                st.error("⏰ Request timed out. Try again or shorten the PDF.")
-            except Exception as e:
-                st.error(f"❌ Summarization failed: {e}")
+        except requests.exceptions.Timeout:
+            st.error("⏰ Request timed out. Try again or shorten the PDF.")
+        except Exception as e:
+            st.error(f"❌ Summarization failed: {e}")
+
+    if st.button("🛑 Cancel Summarization", use_container_width=True):
+        st.session_state["stop_flag"] = True
 
 # -----------------------------------------------------
 # 🔑 KEYWORDS TAB
