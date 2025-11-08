@@ -17,6 +17,14 @@ async def upload_paper(file: UploadFile = File(...)):
         t0 = time.perf_counter()
         contents = await file.read()
 
+        # 🚫 Limit upload size to 1 MB
+        MAX_SIZE_MB = 1
+        if len(contents) > MAX_SIZE_MB * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Max allowed size is {MAX_SIZE_MB} MB."
+            )
+
         # Extract text from the PDF
         text = ""
         with fitz.open(stream=contents, filetype="pdf") as doc:
@@ -44,6 +52,7 @@ async def upload_paper(file: UploadFile = File(...)):
             "duration_ms": int((t1 - t0) * 1000)
         }
 
+    except HTTPException:
+        raise  # preserve intentional errors (like file too large)
     except Exception as e:
-        # Correct indentation: this line is inside the except block
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")

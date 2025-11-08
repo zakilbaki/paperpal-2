@@ -53,7 +53,6 @@ def keep_backend_alive(interval=300):
             print("⚠️ Keep-alive ping failed:", e)
         time.sleep(interval)
 
-
 if "keep_alive_thread" not in st.session_state:
     st.session_state.keep_alive_thread = threading.Thread(
         target=keep_backend_alive, args=(300,), daemon=True
@@ -70,22 +69,28 @@ st.markdown(
         <p style='color:gray;'>Upload, summarize and extract keywords from research papers effortlessly.</p>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # -----------------------------------------------------
 # 📤 UPLOAD SECTION
 # -----------------------------------------------------
 st.markdown("## 📤 Upload Your Paper")
+st.markdown("**⚠️ Max file size: 1 MB (typical research paper length)**")
+
+uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
+
+if uploaded_file:
+    if uploaded_file.size > 1 * 1024 * 1024:
+        st.error("❌ File too large (limit 1 MB). Please upload a smaller paper.")
+        st.stop()
 
 @st.cache_data(show_spinner=False)
 def upload_pdf_cached(file_obj):
     files = {"file": (file_obj.name, file_obj.getvalue(), file_obj.type)}
-    r = requests.post(UPLOAD_URL, files=files, timeout=(10, 180))
+    r = requests.post(UPLOAD_URL, files=files, timeout=(10, 120))
     r.raise_for_status()
     return r.json()
-
-uploaded_file = st.file_uploader("Choose a PDF research paper", type=["pdf"])
 
 if uploaded_file:
     if st.button("🚀 Upload Paper", use_container_width=True):
@@ -110,7 +115,7 @@ if "paper_id" not in st.session_state:
 tab1, tab2 = st.tabs(["🧠 Summarize", "🔑 Keywords"])
 
 # -----------------------------------------------------
-# 🧠 SUMMARIZATION TAB (Optimized)
+# 🧠 SUMMARIZATION TAB
 # -----------------------------------------------------
 with tab1:
     st.markdown("### ✍️ Generate Summary")
@@ -120,69 +125,43 @@ with tab1:
         ["short", "medium", "detailed"],
         horizontal=True,
     )
-
     use_cache = st.toggle("Use cached summary (if available)", value=True)
-
-    # Cancel control
-    if "stop_flag" not in st.session_state:
-        st.session_state["stop_flag"] = False
-
-    def summarize_paper(paper_id, summary_type, use_cache=True):
-        payload = {
-            "paper_id": paper_id,
-            "summary_type": summary_type,
-            "use_cache": use_cache
-        }
-        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 400))
-        r.raise_for_status()
-        return r.json()
 
     progress = st.progress(0)
     status_text = st.empty()
 
+    def summarize_paper(paper_id, summary_type, use_cache=True):
+        payload = {"paper_id": paper_id, "summary_type": summary_type, "use_cache": use_cache}
+        r = requests.post(SUMMARIZE_URL, json=payload, timeout=(10, 400))
+        r.raise_for_status()
+        return r.json()
+
     if st.button("🚀 Summarize Paper", use_container_width=True):
-        st.session_state["stop_flag"] = False
         start_time = time.time()
         try:
-            for i in range(0, 100, 5):
-                if st.session_state.get("stop_flag", False):
-                    st.warning("🛑 Summarization canceled.")
-                    break
-                progress.progress(i + 5)
-                status_text.text(f"⏳ Summarizing... ({i + 5}%)")
+            for i in range(0, 90, 10):
+                progress.progress(i)
+                status_text.text(f"⏳ Summarizing... ({i}%)")
                 time.sleep(0.3)
 
-            if not st.session_state.get("stop_flag", False):
-                res = summarize_paper(
-                    st.session_state["paper_id"],
-                    summary_type,
-                    use_cache
-                )
+            res = summarize_paper(st.session_state["paper_id"], summary_type, use_cache)
 
-                progress.progress(100)
-                status_text.text("✅ Done!")
+            progress.progress(100)
+            status_text.text("✅ Done!")
 
-                with st.expander("🧾 View Full Summary", expanded=True):
-                    st.write(res.get("summary", "No summary returned."))
+            st.markdown(f"### 🧾 {summary_type.capitalize()} Summary")
+            st.info(res.get("summary", "No summary returned."))
 
-                with st.expander("📊 Summary Metrics"):
-                    st.metric("Chunks processed", res.get("chunks", 0))
-                    st.metric("Time (s)", round(res.get("duration_ms", 0)/1000, 2))
-                    st.metric("Model", res.get("model_name", "Unknown"))
-
-                st.caption(
-                    f"🕒 {res.get('duration_ms', 0)/1000:.2f}s • "
-                    f"🔢 {res.get('chunks', 0)} chunks • "
-                    f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
-                )
+            st.caption(
+                f"🕒 {res.get('duration_ms',0)/1000:.2f}s • "
+                f"🔢 {res.get('chunks',0)} chunks • "
+                f"{'⚡ Cached' if res.get('cached') else '🧮 Freshly generated'}"
+            )
 
         except requests.exceptions.Timeout:
             st.error("⏰ Request timed out. Try again or shorten the PDF.")
         except Exception as e:
             st.error(f"❌ Summarization failed: {e}")
-
-    if st.button("🛑 Cancel Summarization", use_container_width=True):
-        st.session_state["stop_flag"] = True
 
 # -----------------------------------------------------
 # 🔑 KEYWORDS TAB
@@ -222,12 +201,11 @@ with tab2:
                             f"<div><b>#{int(row['rank'])}</b> — {row['text']}</div>"
                             f"<div style='font-size:12px;color:#9aa0a6;'>score: {row['score']:.5f}</div>"
                             f"</div>",
-                            unsafe_allow_html=True
+                            unsafe_allow_html=True,
                         )
 
                     with st.expander("See as table"):
                         st.dataframe(df, hide_index=True, use_container_width=True)
-
             except Exception as e:
                 st.error(f"❌ Keyword extraction failed: {e}")
 
