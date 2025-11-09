@@ -8,7 +8,7 @@ import time
 # -----------------------------------------------------
 # CONFIG
 # -----------------------------------------------------
-DEFAULT_BACKEND = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://paperpal-backend1.onrender.com")
 
 st.set_page_config(
     page_title="PaperPal 2.0",
@@ -21,25 +21,16 @@ st.set_page_config(
 # -----------------------------------------------------
 st.markdown("""
 <style>
-/* Main background */
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
     color: #f5f5f5;
 }
 
-/* Titles */
 h1, h2, h3 {
     color: #f5f5f5 !important;
     font-weight: 700;
 }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: #101418 !important;
-    color: #d1d5db;
-}
-
-/* Upload box */
 section[data-testid="stFileUploader"] > div {
     border: 2px dashed #00b4d8;
     border-radius: 10px;
@@ -49,7 +40,6 @@ section[data-testid="stFileUploader"] p {
     color: #e0e0e0 !important;
 }
 
-/* Buttons */
 .stButton>button {
     background: linear-gradient(90deg, #00b4d8, #0077b6);
     color: white;
@@ -62,7 +52,6 @@ section[data-testid="stFileUploader"] p {
     background: linear-gradient(90deg, #0096c7, #023e8a);
 }
 
-/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
     gap: 4px;
 }
@@ -78,24 +67,21 @@ section[data-testid="stFileUploader"] p {
     color: #ffffff !important;
 }
 
-/* Progress bar */
 [data-testid="stProgressBar"] div div {
     background-color: #00b4d8 !important;
 }
 
-/* Cards and containers */
 div.block-container {
     padding-top: 2rem;
+    max-width: 900px;
+    margin: auto;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------
-# BACKEND SETTINGS
+# BACKEND ENDPOINTS
 # -----------------------------------------------------
-with st.sidebar.expander("Backend Settings", expanded=False):
-    BACKEND_BASE_URL = st.text_input("Backend URL", DEFAULT_BACKEND)
-
 UPLOAD_URL = f"{BACKEND_BASE_URL}/api/v1/papers/upload"
 SUMMARIZE_URL = f"{BACKEND_BASE_URL}/api/v1/papers/summarize"
 KEYWORDS_URL = f"{BACKEND_BASE_URL}/api/v1/papers/keywords"
