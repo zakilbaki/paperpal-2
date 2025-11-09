@@ -2,18 +2,16 @@ from transformers import pipeline, AutoTokenizer
 import os, time, torch, re, gc, psutil
 
 # -------------------------------------------------------
-# ⚙️ CONFIGURATION — optimized for Render (2 GB)
+# ⚙️ CONFIGURATION — Optimized for Render (2 GB)
 # -------------------------------------------------------
-DEFAULT_MODEL = os.getenv("SUMMARY_MODEL_NAME", "philschmid/bart-large-cnn-samsum")
-DETAILED_MODEL = os.getenv("SUMMARY_MODEL_DETAILED", "google/pegasus-xsum")
+MODEL_NAME = "facebook/bart-base"  # single lightweight model
+MAX_TOKENS_PER_CHUNK = 250
+OVERLAP = 15
+PER_CHUNK_MAX_NEW_TOKENS = 50
+REDUCE_MAX_NEW_TOKENS = 80
+MAX_WORKERS = 1
 
-MAX_TOKENS_PER_CHUNK = int(os.getenv("SUMMARY_MAX_TOKENS_PER_CHUNK", "300"))
-OVERLAP = int(os.getenv("SUMMARY_OVERLAP", "15"))
-PER_CHUNK_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_PER_CHUNK_MAX_NEW_TOKENS", "60"))
-REDUCE_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_REDUCE_MAX_NEW_TOKENS", "100"))
-MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "1"))
 LOG_PREFIX = "[SUMMARY]"
-
 _tokenizer_cache, _summarizer_cache = {}, {}
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -23,6 +21,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # 🧠 Memory utility
 # -------------------------------------------------------
 def _mem(label=""):
+    """Print current memory usage (MB)."""
     try:
         rss = psutil.Process(os.getpid()).memory_info().rss / 1024**2
         print(f"[MEMORY] {label}: {rss:.1f} MB")
@@ -43,36 +42,39 @@ def clean_text(text: str) -> str:
 
 
 # -------------------------------------------------------
-# 🔤 Model + Tokenizer caching
+# 🔤 Model + Tokenizer (loaded once)
 # -------------------------------------------------------
-def _get_tokenizer(name):
-    if name not in _tokenizer_cache:
-        _tokenizer_cache[name] = AutoTokenizer.from_pretrained(name, use_fast=True)
-    return _tokenizer_cache[name]
+def _get_tokenizer():
+    if MODEL_NAME not in _tokenizer_cache:
+        _tokenizer_cache[MODEL_NAME] = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
+    return _tokenizer_cache[MODEL_NAME]
 
 
-def _get_summarizer(name):
-    if name not in _summarizer_cache:
-        torch.set_num_threads(1)  # single-threaded for safety
-        device = -1  # CPU only
+def _get_summarizer():
+    if MODEL_NAME not in _summarizer_cache:
+        torch.set_num_threads(1)
         summarizer = pipeline(
             "summarization",
-            model=name,
-            tokenizer=_get_tokenizer(name),
-            device=device,
+            model=MODEL_NAME,
+            tokenizer=_get_tokenizer(),
+            device=-1,  # CPU only
             framework="pt",
         )
-        _summarizer_cache[name] = summarizer
-        print(f"{LOG_PREFIX} 🚀 Loaded summarizer: {name} (device={device})")
+        _summarizer_cache[MODEL_NAME] = summarizer
+        print(f"{LOG_PREFIX} 🚀 Loaded summarizer: {MODEL_NAME} (device=-1)")
         _mem("after model load")
-    return _summarizer_cache[name]
+    return _summarizer_cache[MODEL_NAME]
+
+
+# Preload once at startup
+_get_summarizer()
 
 
 # -------------------------------------------------------
 # 🧩 Token-safe chunking
 # -------------------------------------------------------
 def _chunk_text_token_safe(text, max_tokens=MAX_TOKENS_PER_CHUNK):
-    tok = _get_tokenizer(DEFAULT_MODEL)
+    tok = _get_tokenizer()
     ids = tok.encode(text, add_special_tokens=False)
     stride = max_tokens - OVERLAP
     return [
@@ -91,7 +93,7 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
     start = time.time()
     cleaned = clean_text(text)
 
-    # Safety: cap input size
+    # Safety: truncate huge documents
     if len(cleaned) > 180_000:
         cleaned = cleaned[:180_000]
 
@@ -101,19 +103,20 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
             "chunks": 1,
             "successful_chunks": 1,
             "duration_ms": 0,
-            "model_name": "none",
+            "model_name": MODEL_NAME,
             "cached": True,
         }
 
-    if summary_type.lower() == "detailed":
-        model_name = DETAILED_MODEL
+    # Adjust summarization intensity
+    if summary_type == "detailed":
         max_new_tokens = REDUCE_MAX_NEW_TOKENS
+    elif summary_type == "short":
+        max_new_tokens = int(PER_CHUNK_MAX_NEW_TOKENS * 0.7)
     else:
-        model_name = DEFAULT_MODEL
         max_new_tokens = PER_CHUNK_MAX_NEW_TOKENS
 
-    summarizer = _get_summarizer(model_name)
-    tokenizer = _get_tokenizer(model_name)
+    summarizer = _get_summarizer()
+    tokenizer = _get_tokenizer()
     chunks = _chunk_text_token_safe(cleaned, MAX_TOKENS_PER_CHUNK)
 
     if len(chunks) > 8:
@@ -138,13 +141,12 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
 
             if i % 2 == 0:
                 gc.collect()
-                torch.cuda.empty_cache() if torch.cuda.is_available() else None
         except Exception as e:
             print(f"{LOG_PREFIX} ❌ Chunk {i} failed: {e}")
 
     combined = " ".join(summaries).strip()
 
-    # Optional refinement if long
+    # Optional refinement for long outputs
     if len(summaries) > 1 and len(combined.split()) > 400:
         try:
             print(f"{LOG_PREFIX} 🔁 Refining final summary...")
@@ -160,14 +162,13 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
     duration_ms = int((time.time() - start) * 1000)
     _mem("after summarize")
     gc.collect()
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
     return {
         "summary": combined,
         "chunks": len(chunks),
         "successful_chunks": len(summaries),
         "duration_ms": duration_ms,
-        "model_name": model_name,
+        "model_name": MODEL_NAME,
         "max_new_tokens": max_new_tokens,
-        "cached": False,
+        "cached": True,
     }
