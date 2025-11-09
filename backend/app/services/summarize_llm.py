@@ -2,29 +2,37 @@ from transformers import pipeline, AutoTokenizer
 import os, time, torch, re, gc, psutil
 
 # -------------------------------------------------------
-# ⚙️ CONFIGURATION — synced with Render env vars
+# ⚙️ CONFIGURATION — optimized for Render (2 GB)
 # -------------------------------------------------------
-DEFAULT_MODEL = os.getenv("SUMMARY_MODEL_NAME", "sshleifer/distilbart-cnn-12-6")
-DETAILED_MODEL = os.getenv("SUMMARY_MODEL_DETAILED", "philschmid/bart-large-cnn-samsum")
+DEFAULT_MODEL = os.getenv("SUMMARY_MODEL_NAME", "philschmid/bart-large-cnn-samsum")
+DETAILED_MODEL = os.getenv("SUMMARY_MODEL_DETAILED", "google/pegasus-xsum")
 
-MAX_TOKENS_PER_CHUNK = int(os.getenv("SUMMARY_MAX_TOKENS_PER_CHUNK", "400"))
-OVERLAP = int(os.getenv("SUMMARY_OVERLAP", "20"))
-PER_CHUNK_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_PER_CHUNK_MAX_NEW_TOKENS", "80"))
-REDUCE_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_REDUCE_MAX_NEW_TOKENS", "120"))
-MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "1"))  # single worker for stability
+MAX_TOKENS_PER_CHUNK = int(os.getenv("SUMMARY_MAX_TOKENS_PER_CHUNK", "300"))
+OVERLAP = int(os.getenv("SUMMARY_OVERLAP", "15"))
+PER_CHUNK_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_PER_CHUNK_MAX_NEW_TOKENS", "60"))
+REDUCE_MAX_NEW_TOKENS = int(os.getenv("SUMMARY_REDUCE_MAX_NEW_TOKENS", "100"))
+MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "1"))
 LOG_PREFIX = "[SUMMARY]"
 
 _tokenizer_cache, _summarizer_cache = {}, {}
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
+# -------------------------------------------------------
+# 🧠 Memory utility
+# -------------------------------------------------------
 def _mem(label=""):
     try:
-        m = psutil.Process(os.getpid()).memory_info().rss / 1024**2
-        print(f"[MEMORY] {label}: {m:.1f} MB")
+        rss = psutil.Process(os.getpid()).memory_info().rss / 1024**2
+        print(f"[MEMORY] {label}: {rss:.1f} MB")
     except Exception:
         pass
 
+
+# -------------------------------------------------------
+# 🧹 Text Cleaning
+# -------------------------------------------------------
 def clean_text(text: str) -> str:
     text = re.sub(r"(TextColor|Filename|escription|▬|■|□|▲|▶|►|▪|●|–|—|‐|-)", " ", text)
     text = re.sub(r"http\S+|www\S+", "", text)
@@ -33,33 +41,59 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\n+", " ", text)
     return text.strip()
 
+
+# -------------------------------------------------------
+# 🔤 Model + Tokenizer caching
+# -------------------------------------------------------
 def _get_tokenizer(name):
     if name not in _tokenizer_cache:
         _tokenizer_cache[name] = AutoTokenizer.from_pretrained(name, use_fast=True)
     return _tokenizer_cache[name]
 
+
 def _get_summarizer(name):
     if name not in _summarizer_cache:
-        device = 0 if torch.cuda.is_available() else -1
-        _summarizer_cache[name] = pipeline("summarization", model=name, tokenizer=_get_tokenizer(name), device=device)
+        torch.set_num_threads(1)  # single-threaded for safety
+        device = -1  # CPU only
+        summarizer = pipeline(
+            "summarization",
+            model=name,
+            tokenizer=_get_tokenizer(name),
+            device=device,
+            framework="pt",
+        )
+        _summarizer_cache[name] = summarizer
         print(f"{LOG_PREFIX} 🚀 Loaded summarizer: {name} (device={device})")
         _mem("after model load")
     return _summarizer_cache[name]
 
+
+# -------------------------------------------------------
+# 🧩 Token-safe chunking
+# -------------------------------------------------------
 def _chunk_text_token_safe(text, max_tokens=MAX_TOKENS_PER_CHUNK):
     tok = _get_tokenizer(DEFAULT_MODEL)
     ids = tok.encode(text, add_special_tokens=False)
     stride = max_tokens - OVERLAP
-    return [tok.decode(ids[i:i+max_tokens], skip_special_tokens=True) for i in range(0, len(ids), stride)]
+    return [
+        tok.decode(ids[i:i + max_tokens], skip_special_tokens=True)
+        for i in range(0, len(ids), stride)
+    ]
 
+
+# -------------------------------------------------------
+# ⚡ Main Summarization
+# -------------------------------------------------------
 async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "medium") -> dict:
     if not text.strip():
         raise ValueError("Empty text cannot be summarized.")
 
     start = time.time()
     cleaned = clean_text(text)
-    if len(cleaned) > 200_000:
-        cleaned = cleaned[:200_000]
+
+    # Safety: cap input size
+    if len(cleaned) > 180_000:
+        cleaned = cleaned[:180_000]
 
     if len(cleaned.split()) < 120:
         return {
@@ -101,15 +135,16 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
                 do_sample=False,
             )[0]["summary_text"].strip()
             summaries.append(out)
+
             if i % 2 == 0:
                 gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                torch.cuda.empty_cache() if torch.cuda.is_available() else None
         except Exception as e:
             print(f"{LOG_PREFIX} ❌ Chunk {i} failed: {e}")
 
     combined = " ".join(summaries).strip()
 
+    # Optional refinement if long
     if len(summaries) > 1 and len(combined.split()) > 400:
         try:
             print(f"{LOG_PREFIX} 🔁 Refining final summary...")
@@ -125,8 +160,7 @@ async def summarize_text(text: str, max_tokens: int = 512, summary_type: str = "
     duration_ms = int((time.time() - start) * 1000)
     _mem("after summarize")
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
     return {
         "summary": combined,
