@@ -1,101 +1,86 @@
-<div align="center">
+# PaperPal
 
-# 📚 PaperPal V2
-### Production-Ready RAG Chatbot for Academic Papers
+RAG assistant for scientific PDFs with a FastAPI backend, Streamlit frontend, MongoDB storage, and Dockerized local deployment.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit)](https://streamlit.io/)
-[![Docker](https://img.shields.io/badge/Docker-2CA5E0?style=flat&logo=docker)](https://www.docker.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=flat&logo=mongodb)](https://www.mongodb.com/)
-[![Deploy on Render](https://img.shields.io/badge/Deployed%20on-Render-black?logo=render)](https://render.com/)
+## Problem
 
-*An end-to-end AI Application extracting, embedding, and querying knowledge from scientific papers using modern LLMs and Vector Database.*
+Reading long technical papers is slow, and plain LLM chat is unreliable on dense PDFs. PaperPal extracts content from uploaded papers, stores structured information, and answers questions through retrieval rather than generic generation.
 
-</div>
+## Input Source
 
----
+- user-uploaded PDF papers
+- extracted text chunks and metadata
+- MongoDB collections for papers, chunks, and embeddings
 
-## 🎯 The Purpose
-Reading and extracting insights from dense academic PDFs is time-consuming. **PaperPal** solves this by acting as an intelligent reading assistant. 
-Unlike basic scripts, this project is built with **Software Engineering & MLOps best practices**: a decoupled architecture, containerization, and automated cloud deployment.
+## Method
 
----
+- PDF upload and parsing
+- chunking and metadata extraction
+- embedding-based retrieval
+- API-first backend with FastAPI
+- Streamlit UI for upload and interaction
+- Docker and Render deployment configuration
 
-## 🏗️ Architecture Design
+## Current Project Scope
 
-PaperPal follows a strict **Microservices Architecture**:
-1. **Frontend (Streamlit)**: User interface for uploading PDFs and chatting.
-2. **Backend (FastAPI)**: Handles chunking, embedding generation, and LLM API calls.
-3. **Database (MongoDB Vector Search)**: Stores dense vectors for fast and scalable semantic retrieval (RAG).
+- PDF upload endpoint
+- summarization flow
+- keyword extraction flow
+- comparison-ready backend structure
+- containerized frontend/backend services
 
-```mermaid
-graph LR
-    User[User / Researcher] -->|Uploads PDF & Questions| UI(Streamlit Frontend)
-    UI -->|HTTP POST| API(FastAPI Backend)
-    
-    subgraph Data Pipeline
-        API -->|1. Extract & Chunk| TextProcessor
-        TextProcessor -->|2. Generate Embeddings| Embeddings[Embedding Model]
-        Embeddings -->|3. Store/Search| VectorDB[(MongoDB Vector Search)]
-    end
-    
-    API -->|4. Context + Query| LLM[LLM API]
-    LLM -->|5. Answer| UI
+## Results to Surface
+
+This repo already shows strong engineering scope, but it still needs clearer proof points. Add these before pinning:
+
+- supported document size and upload flow
+- example response quality on one sample paper
+- latency for upload and summary generation
+- one screenshot of the UI
+- one screenshot of the API docs
+
+## Project Structure
+
+```text
+paperpal-2/
+├── backend/
+│   ├── app/
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── streamlit_app.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── docker-compose.yml
+├── render.yaml
+└── .env.example
 ```
 
----
+## How To Run
 
-## 🚀 Key Features
-- **Retrieval-Augmented Generation (RAG)**: Prevents LLM hallucinations by forcing models to answer *only* based on the uploaded document.
-- **Microservices Setup**: Fully decoupled UI and API.
-- **Dockerized**: 1-click local setup using `docker-compose.yml`.
-- **Cloud-Ready**: Configured for automated deployment on Render (`render.yaml`).
-
----
-
-## 💻 Tech Stack
-- **Backend**: Python, FastAPI, Pydantic (Data validation).
-- **Frontend**: Streamlit.
-- **AI Core**: LangChain / LlamaIndex (or your specific embedding library), OpenAI API / Mistral.
-- **Database**: MongoDB Vector Atlas.
-- **MLOps/DevOps**: Docker, Docker Compose, Render IaC (Infrastructure as Code).
-
----
-
-## 🛠️ How to run locally (Docker)
-
-To run this application on your machine, you only need [Docker](https://www.docker.com/) installed. No need to manage Python environments locally.
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/zakilbaki/paperpal-2.git
-cd paperpal-2
-```
-
-2. **Set up environment variables:**
-Rename `.env.example` to `.env` and add your API keys (OpenAI, MongoDB URI, etc.).
 ```bash
 cp .env.example .env
-```
-
-3. **Build and spin up the containers:**
-```bash
 docker-compose up --build
 ```
 
-4. **Access the application:**
-- **Frontend UI:** `http://localhost:8501`
-- **Backend API Docs (Swagger):** `http://localhost:8000/docs`
+Frontend: `http://localhost:8501`  
+Backend docs: `http://localhost:8000/docs`
 
----
+## Tech Stack
 
-## 🧠 Challenges & Learnings
-- **Chunking Strategy:** Chunking PDFs while preserving academic structure (abstract, methodology, conclusion) required careful overlap tuning to maintain semantic context.
-- **Vector Search Optimization:** Transitioning from simple distance metrics to MongoDB Vector Search allowed for scalable retrieval.
-- **Containerization for Cloud:** Optimizing the Docker image sizes (`.dockerignore`) to respect the memory limits of free-tier cloud platforms (Render).
+- Python
+- FastAPI
+- Streamlit
+- MongoDB
+- Docker
+- Render
 
----
+## Limitations
 
-> **👨‍💻 Author :** Zakaria Ouahabi — *Engineering Student at IMT Télécom Physique Strasbourg*  
-> *Actively looking for an AI/ML Engineer CDI starting September 2026. Feel free to connect on [LinkedIn](https://linkedin.com/in/zakaria-ouahabi-2299572a7).*
+- README-level evaluation is still missing
+- sample paper workflow is not yet documented
+- duplicate legacy files were removed, but the repo still needs one final structure pass
+
+## Portfolio Positioning
+
+This is one of the strongest repos in the portfolio because it shows NLP, embeddings, API design, UI integration, deployment, and end-to-end ownership in one project.
