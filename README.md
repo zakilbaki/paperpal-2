@@ -81,6 +81,3 @@ Backend docs: `http://localhost:8000/docs`
 - sample paper workflow is not yet documented
 - duplicate legacy files were removed, but the repo still needs one final structure pass
 
-## Portfolio Positioning
-
-This is one of the strongest repos in the portfolio because it shows NLP, embeddings, API design, UI integration, deployment, and end-to-end ownership in one project.
